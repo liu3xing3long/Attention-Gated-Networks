@@ -1,7 +1,8 @@
 import os
 import numpy
 import torch
-from utils.util import mkdir
+# from utils.util import mkdir
+from .utils import mkdir
 from .networks_other import get_n_parameters
 
 class BaseModel():

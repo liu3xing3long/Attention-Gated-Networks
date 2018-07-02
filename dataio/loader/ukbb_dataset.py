@@ -3,17 +3,18 @@ import numpy as np
 import datetime
 
 from os import listdir
-from os.path import join
+# from os.path import join
+import os
 from .utils import load_nifti_img, check_exceptions, is_image_file
 
 
 class UKBBDataset(data.Dataset):
     def __init__(self, root_dir, split, transform=None, preload_data=False):
         super(UKBBDataset, self).__init__()
-        image_dir = join(root_dir, split, 'image')
-        target_dir = join(root_dir, split, 'label')
-        self.image_filenames  = sorted([join(image_dir, x) for x in listdir(image_dir) if is_image_file(x)])
-        self.target_filenames = sorted([join(target_dir, x) for x in listdir(target_dir) if is_image_file(x)])
+        image_dir = os.path.join(root_dir, split, 'image')
+        target_dir = os.path.join(root_dir, split, 'label')
+        self.image_filenames  = sorted([os.path.join(image_dir, x) for x in listdir(image_dir) if is_image_file(x)])
+        self.target_filenames = sorted([os.path.join(target_dir, x) for x in listdir(target_dir) if is_image_file(x)])
         assert len(self.image_filenames) == len(self.target_filenames)
 
         # report the number of images in the dataset

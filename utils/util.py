@@ -9,13 +9,14 @@ import json
 import csv
 from skimage.exposure import rescale_intensity
 
+
 # Converts a Tensor into a Numpy array
 # |imtype|: the desired type of the converted numpy array
 def tensor2im(image_tensor, imgtype='img', datatype=np.uint8):
     image_numpy = image_tensor[0].cpu().float().numpy()
-    if image_numpy.ndim == 4:# image_numpy (C x W x H x S)
-        mid_slice = image_numpy.shape[-1]//2
-        image_numpy = image_numpy[:,:,:,mid_slice]
+    if image_numpy.ndim == 4:  # image_numpy (C x W x H x S)
+        mid_slice = image_numpy.shape[-1] // 2
+        image_numpy = image_numpy[:, :, :, mid_slice]
     if image_numpy.shape[0] == 1:
         image_numpy = np.tile(image_numpy, (3, 1, 1))
     image_numpy = np.transpose(image_numpy, (1, 2, 0))
@@ -49,16 +50,18 @@ def info(object, spacing=10, collapse=1):
     Takes module, class, list, dictionary, or string."""
     methodList = [e for e in dir(object) if isinstance(getattr(object, e), collections.Callable)]
     processFunc = collapse and (lambda s: " ".join(s.split())) or (lambda s: s)
-    print( "\n".join(["%s %s" %
+    print("\n".join(["%s %s" %
                      (method.ljust(spacing),
                       processFunc(str(getattr(object, method).__doc__)))
-                     for method in methodList]) )
+                     for method in methodList]))
+
 
 def varname(p):
     for line in inspect.getframeinfo(inspect.currentframe().f_back)[3]:
         m = re.search(r'\bvarname\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)', line)
         if m:
             return m.group(1)
+
 
 def print_numpy(x, val=True, shp=False):
     x = x.astype(np.float64)
@@ -84,13 +87,25 @@ def mkdir(path):
 
 
 def json_file_to_pyobj(filename):
-    def _json_object_hook(d): return collections.namedtuple('X', d.keys())(*d.values())
+    def _json_object_hook(d):
+        # de-unicode
+        new_pairs = {}
+        for key, value in d.items():
+            if isinstance(value, unicode):
+                value = value.encode('utf-8')
+            if isinstance(key, unicode):
+                key = key.encode('utf-8')
+            new_pairs[key] = value
+        d = new_pairs
+        return collections.namedtuple('X', d.keys())(*d.values())
+
     def json2obj(data): return json.loads(data, object_hook=_json_object_hook)
+
     return json2obj(open(filename).read())
 
 
 def determine_crop_size(inp_shape, div_factor):
-    div_factor= np.array(div_factor, dtype=np.float32)
+    div_factor = np.array(div_factor, dtype=np.float32)
     new_shape = np.ceil(np.divide(inp_shape, div_factor)) * div_factor
     pre_pad = np.round((new_shape - inp_shape) / 2.0).astype(np.int16)
     post_pad = ((new_shape - inp_shape) - pre_pad).astype(np.int16)

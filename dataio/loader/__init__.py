@@ -5,7 +5,7 @@ from dataio.loader.test_dataset import TestDataset
 from dataio.loader.hms_dataset import HMSDataset
 from dataio.loader.cmr_3D_dataset import CMR3DDataset
 from dataio.loader.us_dataset import UltraSoundDataset
-
+from dataio.loader.cmr_3D_dataset_BRATS import CMR3DDatasetBRATS
 
 def get_dataset(name):
     """get_dataset
@@ -15,10 +15,11 @@ def get_dataset(name):
     return {
         'ukbb_sax': CMR3DDataset,
         'acdc_sax': CMR3DDataset,
+        'acdc_sax_brats': CMR3DDatasetBRATS,
         'rvsc_sax': CMR3DDataset,
         'hms_sax':  HMSDataset,
         'test_sax': TestDataset,
-        'us': UltraSoundDataset
+        'us': UltraSoundDataset,
     }[name]
 
 

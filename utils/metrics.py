@@ -4,11 +4,12 @@
 import numpy as np
 import cv2
 
+
 def _fast_hist(label_true, label_pred, n_class):
     mask = (label_true >= 0) & (label_true < n_class)
     hist = np.bincount(
-        n_class * label_true[mask].astype(int) +
-        label_pred[mask], minlength=n_class**2).reshape(n_class, n_class)
+            n_class * label_true[mask].astype(int) +
+            label_pred[mask], minlength=n_class ** 2).reshape(n_class, n_class)
     return hist
 
 
@@ -81,6 +82,7 @@ def dice_score(label_gt, label_pred, n_class):
 
 def precision_and_recall(label_gt, label_pred, n_class):
     from sklearn.metrics import precision_score, recall_score
+
     assert len(label_gt) == len(label_pred)
     precision = np.zeros(n_class, dtype=np.float32)
     recall = np.zeros(n_class, dtype=np.float32)

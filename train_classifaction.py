@@ -200,7 +200,11 @@ def train(arguments):
             # Error visualisation
             errors = model.get_accumulated_errors()
             stats = model.get_classification_stats()
-            error_logger.update({**errors, **stats}, split=split)
+            merged_dict = {}
+            merged_dict.update(errors)
+            merged_dict.update(stats)
+            # error_logger.update({**errors, **stats}, split=split)
+            error_logger.update(merged_dict, split=split)
 
             # HACK save validation error
             if split == 'validation':

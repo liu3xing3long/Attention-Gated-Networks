@@ -3,21 +3,22 @@ import numpy as np
 import os
 
 from os import listdir
-from os.path import join
+# from os.path import os.path.join
+import os
 from .utils import load_nifti_img, check_exceptions, is_image_file
 
 
 class TestDataset(data.Dataset):
     def __init__(self, root_dir, transform):
         super(TestDataset, self).__init__()
-        image_dir = join(root_dir, 'image')
-        self.image_filenames = sorted([join(image_dir, x) for x in listdir(image_dir) if is_image_file(x)])
+        image_dir = os.path.join(root_dir, 'image')
+        self.image_filenames = sorted([os.path.join(image_dir, x) for x in listdir(image_dir) if is_image_file(x)])
 
         # Add the corresponding ground-truth images if they exist
         self.label_filenames = []
-        label_dir = join(root_dir, 'label')
+        label_dir = os.path.join(root_dir, 'label')
         if os.path.isdir(label_dir):
-            self.label_filenames = sorted([join(label_dir, x) for x in listdir(label_dir) if is_image_file(x)])
+            self.label_filenames = sorted([os.path.join(label_dir, x) for x in listdir(label_dir) if is_image_file(x)])
             assert len(self.label_filenames) == len(self.image_filenames)
 
         # data pre-processing

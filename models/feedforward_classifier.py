@@ -2,6 +2,7 @@ import os
 import numpy as np
 import utils.util as util
 from collections import OrderedDict
+import logging
 
 import torch
 from torch.autograd import Variable

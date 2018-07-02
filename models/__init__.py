@@ -1,7 +1,7 @@
 # Abstract level model definition
 # Returns the model class for specified network type
 import os
-
+import logging
 
 class ModelOpts:
     def __init__(self):
@@ -64,7 +64,7 @@ def get_model(json_opts):
     model_opts.initialise(json_opts)
 
     # Print the model type
-    print('\nInitialising model {}'.format(model_opts.model_type))
+    logging.debug('\nInitialising model {}'.format(model_opts.model_type))
 
     model_type = model_opts.type
     if model_type == 'seg':
@@ -82,9 +82,8 @@ def get_model(json_opts):
         from .aggregated_classifier import AggregatedClassifier
         model = AggregatedClassifier()
 
-
     # Initialise the created model
     model.initialize(model_opts)
-    print("Model [%s] is created" % (model.name()))
+    logging.debug("Model [%s] is created" % (model.name()))
 
     return model

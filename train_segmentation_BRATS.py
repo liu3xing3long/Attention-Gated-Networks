@@ -2,7 +2,6 @@ import numpy
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-
 from dataio.loader import get_dataset, get_dataset_path
 from dataio.transformation import get_dataset_transformation
 from utils.util import json_file_to_pyobj
@@ -10,9 +9,39 @@ from utils.visualiser import Visualiser
 from utils.error_logger import ErrorLogger
 
 from models import get_model
+import logging
+import time
+import os
+import numpy as np
+
+
+def datestr():
+    now = time.gmtime()
+    return '{}{:02}{:02}_{:02}{:02}{:02}'.format(
+            now.tm_year, now.tm_mon, now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec)
+
+
+def init_logging(logFilename):
+    """
+    Init for logging
+    """
+    logging.basicConfig(
+            level=logging.DEBUG,
+            format='LINE %(lineno)-4d  %(levelname)-8s %(message)s',
+            datefmt='%m-%d %H:%M',
+            filename=logFilename,
+            filemode='w')
+    # define a Handler which writes INFO messages or higher to the sys.stderr
+    console = logging.StreamHandler()
+    console.setLevel(logging.DEBUG)
+    # set a format which is simpler for console use
+    formatter = logging.Formatter('LINE %(lineno)-4d : %(levelname)-8s %(message)s')
+    # tell the handler to use this format
+    console.setFormatter(formatter)
+    logging.getLogger('').addHandler(console)
+
 
 def train(arguments):
-
     # Parse input arguments
     json_filename = arguments.config
     network_debug = arguments.debug
@@ -20,14 +49,43 @@ def train(arguments):
     # Load options
     json_opts = json_file_to_pyobj(json_filename)
     train_opts = json_opts.training
+    model_opts = json_opts.model
 
     # Architecture type
     arch_type = train_opts.arch_type
 
+    MODEL_TYPE = model_opts.model_type
+    output_path = "{}-{}-{}".format("./output/BRATS", MODEL_TYPE, datestr())
+    # make dir
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    init_logging(os.path.join(output_path, "main3d.log"))
+
+    # split used modality
+    modality = [mod for mod in train_opts.modality.split()]
+
     # Setup Dataset and Augmentation
     ds_class = get_dataset(arch_type)
-    ds_path  = get_dataset_path(arch_type, json_opts.data_path)
+    ds_path = get_dataset_path(arch_type, json_opts.data_path)
     ds_transform = get_dataset_transformation(arch_type, opts=json_opts.augmentation)
+
+    # data paths
+    DATA_FOLDER = ds_path
+    SUBSET_FOLDERS = ["HGG", "LGG"]
+    DATA_LABEL_FOLDER = "labels"
+
+    # subset split
+    subset_train = train_opts.subset_train
+    subset_test = train_opts.subset_test
+    subset_val = train_opts.subset_val
+    if subset_train is None:
+        subset_train = np.arange(15)
+        subset_train = [x for x in subset_train if x not in args.subset_test]
+        subset_train = [x for x in subset_train if x not in args.subset_val]
+
+    logging.debug('train: {}, val: {}, test: {}'.format(subset_train, subset_val, subset_test))
+    logging.debug('using modality {}'.format(modality))
 
     # Setup the NN Model
     model = get_model(json_opts.model)
@@ -37,12 +95,16 @@ def train(arguments):
         exit()
 
     # Setup Data Loader
-    train_dataset = ds_class(ds_path, split='train',      transform=ds_transform['train'], preload_data=train_opts.preloadData)
-    valid_dataset = ds_class(ds_path, split='validation', transform=ds_transform['valid'], preload_data=train_opts.preloadData)
-    test_dataset  = ds_class(ds_path, split='test',       transform=ds_transform['valid'], preload_data=train_opts.preloadData)
-    train_loader = DataLoader(dataset=train_dataset, num_workers=16, batch_size=train_opts.batchSize, shuffle=True)
-    valid_loader = DataLoader(dataset=valid_dataset, num_workers=16, batch_size=train_opts.batchSize, shuffle=False)
-    test_loader  = DataLoader(dataset=test_dataset,  num_workers=16, batch_size=train_opts.batchSize, shuffle=False)
+    train_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_train,
+                             keywords=modality, mode='train', transform=ds_transform['train'])
+    valid_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
+                             keywords=modality, mode='val', transform=ds_transform['valid'])
+    test_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
+                            keywords=modality, mode='test',  transform=ds_transform['valid'])
+
+    train_loader = DataLoader(dataset=train_dataset, num_workers=8, batch_size=train_opts.batchSize, shuffle=True)
+    valid_loader = DataLoader(dataset=valid_dataset, num_workers=8, batch_size=train_opts.batchSize, shuffle=False)
+    test_loader = DataLoader(dataset=test_dataset, num_workers=8, batch_size=train_opts.batchSize, shuffle=False)
 
     # Visualisation Parameters
     visualizer = Visualiser(json_opts.visualisation, save_dir=model.save_dir)
@@ -58,7 +120,7 @@ def train(arguments):
             # Make a training update
             model.set_input(images, labels)
             model.optimize_parameters()
-            #model.optimize_parameters_accumulate_grd(epoch_iter)
+            # model.optimize_parameters_accumulate_grd(epoch_iter)
 
             # Error visualisation
             errors = model.get_current_errors()
@@ -105,8 +167,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='CNN Seg Training Function')
 
-    parser.add_argument('-c', '--config',  help='training config file', required=True)
-    parser.add_argument('-d', '--debug',   help='returns number of parameters and bp/fp runtime', action='store_true')
+    parser.add_argument('-c', '--config', help='training config file', required=True)
+    parser.add_argument('-d', '--debug', help='returns number of parameters and bp/fp runtime', action='store_true')
     args = parser.parse_args()
 
     train(args)

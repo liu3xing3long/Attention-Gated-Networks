@@ -84,7 +84,6 @@ class ErrorLogger(object):
 
             self.variables[split][key].update(value)
 
-
     def get_errors(self, split):
         output = dict()
         for key, meter_obj in self.variables[split].items():

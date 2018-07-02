@@ -1,14 +1,15 @@
 import torch
 from torch.autograd import Variable
 import torch.optim as optim
+import logging
 
 from collections import OrderedDict
-import utils.util as util
+# import utils.util as util
 from .base_model import BaseModel
 from .networks import get_network
 from .layers.loss import *
 from .networks_other import get_scheduler, print_network, benchmark_fp_bp_time
-from .utils import segmentation_stats, get_optimizer, get_criterion
+from .utils import segmentation_stats, get_optimizer, get_criterion, tensor2im
 from .networks.utils import HookBasedFeatureExtractor
 
 
@@ -31,7 +32,8 @@ class FeedForwardSegmentation(BaseModel):
                                in_channels=opts.input_nc, nonlocal_mode=opts.nonlocal_mode,
                                tensor_dim=opts.tensor_dim, feature_scale=opts.feature_scale,
                                attention_dsample=opts.attention_dsample)
-        if self.use_cuda: self.net = self.net.cuda()
+        if self.use_cuda:
+            self.net = self.net.cuda()
 
         # load the model if a path is specified or it is in inference mode
         if not self.isTrain or opts.continue_train:
@@ -52,16 +54,16 @@ class FeedForwardSegmentation(BaseModel):
             self.optimizer_S = get_optimizer(opts, self.net.parameters())
             self.optimizers.append(self.optimizer_S)
 
-            # print the network details
-            # print the network details
-            if kwargs.get('verbose', True):
-                print('Network is initialized')
+            # logging.debug the network details
+            # logging.debug the network details
+            if kwargs.get('verbose', False):
+                logging.debug('Network is initialized')
                 print_network(self.net)
 
     def set_scheduler(self, train_opt):
         for optimizer in self.optimizers:
             self.schedulers.append(get_scheduler(optimizer, train_opt))
-            print('Scheduler is added for optimiser {0}'.format(optimizer))
+            logging.debug('Scheduler is added for optimiser {0}'.format(optimizer))
 
     def set_input(self, *inputs):
         # self.input.resize_(inputs[0].size()).copy_(inputs[0])
@@ -69,7 +71,7 @@ class FeedForwardSegmentation(BaseModel):
             # If it's a 5D array and 2D model then (B x C x H x W x Z) -> (BZ x C x H x W)
             bs = _input.size()
             if (self.tensor_dim == '2D') and (len(bs) > 4):
-                _input = _input.permute(0,4,1,2,3).contiguous().view(bs[0]*bs[4], bs[1], bs[2], bs[3])
+                _input = _input.permute(0, 4, 1, 2, 3).contiguous().view(bs[0] * bs[4], bs[1], bs[2], bs[3])
 
             # Define that it's a cuda array
             if idx == 0:
@@ -86,7 +88,7 @@ class FeedForwardSegmentation(BaseModel):
             # Apply a softmax and return a segmentation map
             self.logits = self.net.apply_argmax_softmax(self.prediction)
             self.pred_seg = self.logits.data.max(1)[1].unsqueeze(1)
-            
+
     def backward(self):
         self.loss_S = self.criterion(self.prediction, self.target)
         self.loss_S.backward()
@@ -102,7 +104,8 @@ class FeedForwardSegmentation(BaseModel):
     # This function updates the network parameters every "accumulate_iters"
     def optimize_parameters_accumulate_grd(self, iteration):
         accumulate_iters = int(2)
-        if iteration == 0: self.optimizer_S.zero_grad()
+        if iteration == 0:
+            self.optimizer_S.zero_grad()
         self.net.train()
         self.forward(split='train')
         self.backward()
@@ -132,8 +135,8 @@ class FeedForwardSegmentation(BaseModel):
                             ])
 
     def get_current_visuals(self):
-        inp_img = util.tensor2im(self.input, 'img')
-        seg_img = util.tensor2im(self.pred_seg, 'lbl')
+        inp_img = tensor2im(self.input, 'img')
+        seg_img = tensor2im(self.pred_seg, 'lbl')
         return OrderedDict([('out_S', seg_img), ('inp_S', inp_img)])
 
     def get_feature_maps(self, layer_name, upscale):
@@ -141,7 +144,7 @@ class FeedForwardSegmentation(BaseModel):
         return feature_extractor.forward(Variable(self.input))
 
     # returns the fp/bp times of the model
-    def get_fp_bp_time (self, size=None):
+    def get_fp_bp_time(self, size=None):
         if size is None:
             size = (1, 1, 160, 160, 96)
 
@@ -150,7 +153,7 @@ class FeedForwardSegmentation(BaseModel):
         fp, bp = benchmark_fp_bp_time(self.net, inp_array, out_array)
 
         bsize = size[0]
-        return fp/float(bsize), bp/float(bsize)
+        return fp / float(bsize), bp / float(bsize)
 
     def save(self, epoch_label):
         self.save_network(self.net, 'S', epoch_label, self.gpu_ids)

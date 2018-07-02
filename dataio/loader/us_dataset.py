@@ -5,7 +5,7 @@ import numpy as np
 import datetime
 
 from os import listdir
-from os.path import join
+# from os.path import join
 #from .utils import check_exceptions
 
 

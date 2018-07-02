@@ -5,6 +5,7 @@ import ntpath
 import time
 from utils import util, html
 
+
 # Use the following comment to launch a visdom server
 # python -m visdom.server
 
@@ -24,6 +25,7 @@ class Visualiser():
 
         if self.display_id > 0:
             import visdom
+
             self.vis = visdom.Visdom(port=opt.display_port)
 
         if self.use_html:
@@ -62,7 +64,7 @@ class Visualiser():
                     if idx % ncols == 0:
                         label_html += '<tr>%s</tr>' % label_html_row
                         label_html_row = ''
-                white_image = np.ones_like(image_numpy.transpose([2, 0, 1]))*255
+                white_image = np.ones_like(image_numpy.transpose([2, 0, 1])) * 255
                 while idx % ncols != 0:
                     images.append(white_image)
                     label_html_row += '<td></td>'
@@ -104,52 +106,52 @@ class Visualiser():
             webpage.save()
 
     def plot_table_html(self, x, y, key, split_name, **kwargs):
-        key_s = key+'_'+split_name
+        key_s = key + '_' + split_name
         if key_s not in self.error_plots:
             self.error_wins[key_s] = self.display_id * 3 + len(self.error_wins)
         else:
             self.vis.close(self.error_plots[key_s])
-
 
         table = pd.DataFrame(np.array(y['data']).transpose(),
                              index=kwargs['labels'], columns=y['colnames'])
         table_html = table.round(2).to_html(col_space=200, bold_rows=True, border=12)
 
         self.error_plots[key_s] = self.vis.text(table_html,
-                                                opts=dict(title=self.name+split_name,
+                                                opts=dict(title=self.name + split_name,
                                                           width=350, height=350,
                                                           win=self.error_wins[key_s]))
 
-
     def plot_heatmap(self, x, y, key, split_name, **kwargs):
-        key_s = key+'_'+split_name
+        key_s = key + '_' + split_name
         if key_s not in self.error_plots:
             self.error_wins[key_s] = self.display_id * 3 + len(self.error_wins)
         else:
             self.vis.close(self.error_plots[key_s])
         self.error_plots[key_s] = self.vis.heatmap(
-            X=y,
-            opts=dict(
-                columnnames=kwargs['labels'],
-                rownames=kwargs['labels'],
-                title=self.name + ' confusion matrix',
-                win=self.error_wins[key_s]))
+                X=y,
+                opts=dict(
+                        columnnames=kwargs['labels'],
+                        rownames=kwargs['labels'],
+                        title=self.name + ' confusion matrix',
+                        win=self.error_wins[key_s]))
 
     def plot_line(self, x, y, key, split_name):
         if key not in self.error_plots:
             self.error_wins[key] = self.display_id * 3 + len(self.error_wins)
             self.error_plots[key] = self.vis.line(
-                X=np.array([x, x]),
-                Y=np.array([y, y]),
-                opts=dict(
-                    legend=[split_name],
-                    title=self.name + ' {} over time'.format(key),
-                    xlabel='Epochs',
-                    ylabel=key,
-                    win=self.error_wins[key]
-            ))
+                    X=np.array([x, x]),
+                    Y=np.array([y, y]),
+                    opts=dict(
+                            legend=[split_name],
+                            title=self.name + ' {} over time'.format(key),
+                            xlabel='Epochs',
+                            ylabel=key,
+                            win=self.error_wins[key]
+                    ))
         else:
-            self.vis.updateTrace(X=np.array([x]), Y=np.array([y]), win=self.error_plots[key], name=split_name)
+            # self.vis.updateTrace(X=np.array([x]), Y=np.array([y]), win=self.error_plots[key], name=split_name)
+            self.vis.line(X=np.array([x]), Y=np.array([y]), win=self.error_plots[key], update='append', name=split_name)
+
     # errors: dictionary of error labels and values
     def plot_current_errors(self, epoch, errors, split_name, counter_ratio=0.0, **kwargs):
         if self.display_id > 0:
@@ -158,12 +160,11 @@ class Visualiser():
                 y = errors[key]
                 if isinstance(y, dict):
                     if y['type'] == 'table':
-                        self.plot_table_html(x,y,key,split_name, **kwargs)
+                        self.plot_table_html(x, y, key, split_name, **kwargs)
                 elif np.isscalar(y):
-                    self.plot_line(x,y,key,split_name)
+                    self.plot_line(x, y, key, split_name)
                 elif y.ndim == 2:
-                    self.plot_heatmap(x,y,key,split_name, **kwargs)
-
+                    self.plot_heatmap(x, y, key, split_name, **kwargs)
 
     # errors: same format as |errors| of plotCurrentErrors
     def print_current_errors(self, epoch, errors, split_name):

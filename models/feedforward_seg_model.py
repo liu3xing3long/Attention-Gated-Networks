@@ -39,6 +39,12 @@ class FeedForwardSegmentation(BaseModel):
             self.net = DataParallel(self.net, device_ids=self.gpu_ids)
             self.net = self.net.cuda()
 
+            for name, param in self.net.named_parameters():
+                if not param.is_cuda:
+                    logging.debug("!!!!!! {} not on GPU !!!!!!".format(name))
+                # else:
+                #     logging.debug("param {} on GPU ".format(name))
+
         # load the model if a path is specified or it is in inference mode
         if not self.isTrain or opts.continue_train:
             self.path_pre_trained_model = opts.path_pre_trained_model
@@ -60,7 +66,7 @@ class FeedForwardSegmentation(BaseModel):
 
             # logging.debug the network details
             # logging.debug the network details
-            if kwargs.get('verbose', True):
+            if kwargs.get('verbose', False):
                 logging.debug('Network is initialized')
                 print_network(self.net)
 
@@ -98,7 +104,10 @@ class FeedForwardSegmentation(BaseModel):
 
     def forward(self, split):
         if split == 'train':
+            # logging.debug("model on {}".format(self.net.module.get_device()))
+            # logging.debug("data on {}".format(self.input.get_device()))
             self.prediction = self.net(Variable(self.input))
+
         elif split == 'test':
             self.prediction = self.net(Variable(self.input, volatile=True))
             # Apply a softmax and return a segmentation map

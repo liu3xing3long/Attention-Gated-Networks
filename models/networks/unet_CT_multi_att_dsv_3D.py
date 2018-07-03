@@ -9,7 +9,7 @@ from models.layers.grid_attention_layer import GridAttentionBlock3D
 class unet_CT_multi_att_dsv_3D(nn.Module):
 
     def __init__(self, feature_scale=4, n_classes=21, is_deconv=True, in_channels=3,
-                 nonlocal_mode='concatenation', attention_dsample=(2,2,2), is_batchnorm=True):
+                 nonlocal_mode='concatenation', attention_dsample=(2, 2, 2), is_batchnorm=True):
         super(unet_CT_multi_att_dsv_3D, self).__init__()
         self.is_deconv = is_deconv
         self.in_channels = in_channels
@@ -20,28 +20,31 @@ class unet_CT_multi_att_dsv_3D(nn.Module):
         filters = [int(x / self.feature_scale) for x in filters]
 
         # downsampling
-        self.conv1 = UnetConv3(self.in_channels, filters[0], self.is_batchnorm, kernel_size=(3,3,3), padding_size=(1,1,1))
+        self.conv1 = UnetConv3(self.in_channels, filters[0], self.is_batchnorm, kernel_size=(3, 3, 3),
+                               padding_size=(1, 1, 1))
         self.maxpool1 = nn.MaxPool3d(kernel_size=(2, 2, 2))
 
-        self.conv2 = UnetConv3(filters[0], filters[1], self.is_batchnorm, kernel_size=(3,3,3), padding_size=(1,1,1))
+        self.conv2 = UnetConv3(filters[0], filters[1], self.is_batchnorm, kernel_size=(3, 3, 3), padding_size=(1, 1, 1))
         self.maxpool2 = nn.MaxPool3d(kernel_size=(2, 2, 2))
 
-        self.conv3 = UnetConv3(filters[1], filters[2], self.is_batchnorm, kernel_size=(3,3,3), padding_size=(1,1,1))
+        self.conv3 = UnetConv3(filters[1], filters[2], self.is_batchnorm, kernel_size=(3, 3, 3), padding_size=(1, 1, 1))
         self.maxpool3 = nn.MaxPool3d(kernel_size=(2, 2, 2))
 
-        self.conv4 = UnetConv3(filters[2], filters[3], self.is_batchnorm, kernel_size=(3,3,3), padding_size=(1,1,1))
+        self.conv4 = UnetConv3(filters[2], filters[3], self.is_batchnorm, kernel_size=(3, 3, 3), padding_size=(1, 1, 1))
         self.maxpool4 = nn.MaxPool3d(kernel_size=(2, 2, 2))
 
-        self.center = UnetConv3(filters[3], filters[4], self.is_batchnorm, kernel_size=(3,3,3), padding_size=(1,1,1))
-        self.gating = UnetGridGatingSignal3(filters[4], filters[4], kernel_size=(1, 1, 1), is_batchnorm=self.is_batchnorm)
+        self.center = UnetConv3(filters[3], filters[4], self.is_batchnorm, kernel_size=(3, 3, 3),
+                                padding_size=(1, 1, 1))
+        self.gating = UnetGridGatingSignal3(filters[4], filters[4], kernel_size=(1, 1, 1),
+                                            is_batchnorm=self.is_batchnorm)
 
         # attention blocks
         self.attentionblock2 = MultiAttentionBlock(in_size=filters[1], gate_size=filters[2], inter_size=filters[1],
-                                                   nonlocal_mode=nonlocal_mode, sub_sample_factor= attention_dsample)
+                                                   nonlocal_mode=nonlocal_mode, sub_sample_factor=attention_dsample)
         self.attentionblock3 = MultiAttentionBlock(in_size=filters[2], gate_size=filters[3], inter_size=filters[2],
-                                                   nonlocal_mode=nonlocal_mode, sub_sample_factor= attention_dsample)
+                                                   nonlocal_mode=nonlocal_mode, sub_sample_factor=attention_dsample)
         self.attentionblock4 = MultiAttentionBlock(in_size=filters[3], gate_size=filters[4], inter_size=filters[3],
-                                                   nonlocal_mode=nonlocal_mode, sub_sample_factor= attention_dsample)
+                                                   nonlocal_mode=nonlocal_mode, sub_sample_factor=attention_dsample)
 
         # upsampling
         self.up_concat4 = UnetUp3_CT(filters[4], filters[3], is_batchnorm)
@@ -56,7 +59,7 @@ class unet_CT_multi_att_dsv_3D(nn.Module):
         self.dsv1 = nn.Conv3d(in_channels=filters[0], out_channels=n_classes, kernel_size=1)
 
         # final conv (without any concat)
-        self.final = nn.Conv3d(n_classes*4, n_classes, 1)
+        self.final = nn.Conv3d(n_classes * 4, n_classes, 1)
 
         # initialise weights
         for m in self.modules():
@@ -66,6 +69,8 @@ class unet_CT_multi_att_dsv_3D(nn.Module):
                 init_weights(m, init_type='kaiming')
 
     def forward(self, inputs):
+        # print "input size {} on device {}".format(inputs.size(), inputs.data.get_device())
+
         # Feature Extraction
         conv1 = self.conv1(inputs)
         maxpool1 = self.maxpool1(conv1)
@@ -79,29 +84,48 @@ class unet_CT_multi_att_dsv_3D(nn.Module):
         conv4 = self.conv4(maxpool3)
         maxpool4 = self.maxpool4(conv4)
 
+        # print "after down conv size {} on device {}".format(maxpool4.size(), maxpool4.data.get_device())
+
         # Gating Signal Generation
         center = self.center(maxpool4)
         gating = self.gating(center)
 
+        # print "after gate size {} on device {}".format(gating.size(), gating.data.get_device())
+
         # Attention Mechanism
         # Upscaling Part (Decoder)
         g_conv4, att4 = self.attentionblock4(conv4, gating)
+        # print "after att4 size {} on device {}".format(g_conv4.size(), g_conv4.data.get_device())
+
         up4 = self.up_concat4(g_conv4, center)
         g_conv3, att3 = self.attentionblock3(conv3, up4)
+        # print "after att3 size {} on device {}".format(g_conv3.size(), g_conv3.data.get_device())
+
         up3 = self.up_concat3(g_conv3, up4)
         g_conv2, att2 = self.attentionblock2(conv2, up3)
+        # print "after att2 size {} on device {}".format(g_conv2.size(), g_conv2.data.get_device())
+
         up2 = self.up_concat2(g_conv2, up3)
+        # print "after up2 and attention size {} on device {}".format(up2.size(), up2.data.get_device())
+
         up1 = self.up_concat1(conv1, up2)
+        # print "after up1 and attention size {} on device {}".format(up1.size(), up1.data.get_device())
 
         # Deep Supervision
         dsv4 = self.dsv4(up4)
         dsv3 = self.dsv3(up3)
         dsv2 = self.dsv2(up2)
         dsv1 = self.dsv1(up1)
-        final = self.final(torch.cat([dsv1,dsv2,dsv3,dsv4], dim=1))
+
+        # print "after dsv1 size {} on device {}".format(dsv1.size(), dsv1.data.get_device())
+        # print "after dsv2 size {} on device {}".format(dsv2.size(), dsv2.data.get_device())
+        # print "after dsv3 size {} on device {}".format(dsv3.size(), dsv3.data.get_device())
+        # print "after dsv4 size {} on device {}".format(dsv4.size(), dsv4.data.get_device())
+
+        final = self.final(torch.cat([dsv1, dsv2, dsv3, dsv4], dim=1))
+        # print "after final size {} on device {}".format(final.size(), final.data.get_device())
 
         return final
-
 
     @staticmethod
     def apply_argmax_softmax(pred):
@@ -115,18 +139,19 @@ class MultiAttentionBlock(nn.Module):
         super(MultiAttentionBlock, self).__init__()
         self.gate_block_1 = GridAttentionBlock3D(in_channels=in_size, gating_channels=gate_size,
                                                  inter_channels=inter_size, mode=nonlocal_mode,
-                                                 sub_sample_factor= sub_sample_factor)
+                                                 sub_sample_factor=sub_sample_factor)
         self.gate_block_2 = GridAttentionBlock3D(in_channels=in_size, gating_channels=gate_size,
                                                  inter_channels=inter_size, mode=nonlocal_mode,
                                                  sub_sample_factor=sub_sample_factor)
-        self.combine_gates = nn.Sequential(nn.Conv3d(in_size*2, in_size, kernel_size=1, stride=1, padding=0),
+        self.combine_gates = nn.Sequential(nn.Conv3d(in_size * 2, in_size, kernel_size=1, stride=1, padding=0),
                                            nn.BatchNorm3d(in_size),
                                            nn.ReLU(inplace=True)
                                            )
 
         # initialise the blocks
         for m in self.children():
-            if m.__class__.__name__.find('GridAttentionBlock3D') != -1: continue
+            if m.__class__.__name__.find('GridAttentionBlock3D') != -1:
+                continue
             init_weights(m, init_type='kaiming')
 
     def forward(self, input, gating_signal):
@@ -134,5 +159,3 @@ class MultiAttentionBlock(nn.Module):
         gate_2, attention_2 = self.gate_block_2(input, gating_signal)
 
         return self.combine_gates(torch.cat([gate_1, gate_2], 1)), torch.cat([attention_1, attention_2], 1)
-
-

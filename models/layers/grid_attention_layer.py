@@ -64,6 +64,7 @@ class _GridAttentionBlockND(nn.Module):
 
         # Initialise weights
         for m in self.children():
+            # print "child {}".format(m)
             init_weights(m, init_type='kaiming')
 
         # Define the operation
@@ -76,6 +77,12 @@ class _GridAttentionBlockND(nn.Module):
         else:
             raise NotImplementedError('Unknown operation function.')
 
+        # gpu_ids = [0, 1, 2, 3]
+        # self.W = nn.DataParallel(self.W).cuda()
+        # self.phi = nn.DataParallel(self.phi).cuda()
+        # self.psi = nn.DataParallel(self.psi).cuda()
+        # self.theta = nn.DataParallel(self.theta).cuda()
+
     def forward(self, x, g):
         '''
         :param x: (b, c, t, h, w)
@@ -83,7 +90,10 @@ class _GridAttentionBlockND(nn.Module):
         :return:
         '''
 
+        # print "before operation size {} on device {}".format(x.size(), x.data.get_device())
         output = self.operation_function(x, g)
+        # print "after operation size {} on device {}".format(output[0].size(), output[0].data.get_device())
+
         return output
 
     def _concatenation(self, x, g):
@@ -91,23 +101,29 @@ class _GridAttentionBlockND(nn.Module):
         batch_size = input_size[0]
         assert batch_size == g.size(0)
 
+        # print "input size {} on device {}".format(input_size, x.data.get_device())
+
         # theta => (b, c, t, h, w) -> (b, i_c, t, h, w) -> (b, i_c, thw)
         # phi   => (b, g_d) -> (b, i_c)
         theta_x = self.theta(x)
         theta_x_size = theta_x.size()
+        # print "theta_x size {} on device {}".format(theta_x.size(), theta_x.data.get_device())
 
         # g (b, c, t', h', w') -> phi_g (b, i_c, t', h', w')
         #  Relu(theta_x + phi_g + bias) -> f = (b, i_c, thw) -> (b, i_c, t/s1, h/s2, w/s3)
         phi_g = F.upsample(self.phi(g), size=theta_x_size[2:], mode=self.upsample_mode)
         f = F.relu(theta_x + phi_g, inplace=True)
+        # print "phi_g size {} on device {}".format(phi_g.size(), phi_g.data.get_device())
 
         #  psi^T * f -> (b, psi_i_c, t/s1, h/s2, w/s3)
         sigm_psi_f = F.sigmoid(self.psi(f))
+        # print "sigm_psi_f size {} on device {}".format(sigm_psi_f.size(), sigm_psi_f.data.get_device())
 
         # upsample the attentions and multiply
         sigm_psi_f = F.upsample(sigm_psi_f, size=input_size[2:], mode=self.upsample_mode)
         y = sigm_psi_f.expand_as(x) * x
         W_y = self.W(y)
+        # print "W_y size {} on device {}".format(W_y.size(), W_y.data.get_device())
 
         return W_y, sigm_psi_f
 

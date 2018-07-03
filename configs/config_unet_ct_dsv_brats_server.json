@@ -13,7 +13,7 @@
     "modality": "flair"
   },
   "visualisation":{
-    "server": "http://localhost",
+    "server": "http://10.10.15.115",
     "display_port": 11111,
     "no_html": true,
     "display_winsize": 256,
@@ -42,11 +42,11 @@
     "tensor_dim": "3D",
     "division_factor": 16,
     "input_nc": 1,
-    "output_nc": 2,
+    "output_nc": 4,
     "lr_rate": 1e-3,
     "l2_reg_weight": 1e-6,
     "feature_scale": 4,
-    "gpu_ids": [0],
+    "gpu_ids": [0,1,2,3],
     "isTrain": true,
     "checkpoints_dir": "./checkpoints",
     "experiment_name": "experiment_unet_ct_dsv_big",

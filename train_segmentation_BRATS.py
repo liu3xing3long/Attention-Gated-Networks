@@ -98,7 +98,7 @@ def train(arguments):
 
     # Setup Data Loader
     train_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_train,
-                             keywords=modality, mode='train', transform=ds_transform['train'], augment_scale=4)
+                             keywords=modality, mode='train', transform=ds_transform['train'], augment_scale=2)
     valid_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
                              keywords=modality, mode='val', transform=ds_transform['valid'])
     test_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
@@ -132,6 +132,7 @@ def train(arguments):
 
             # Error visualisation
             errors = model.get_current_errors()
+            # logging.debug("train errors {}".format(errors))
             error_logger.update(errors, split='train')
 
         # Validation and Testing Iterations
@@ -145,6 +146,8 @@ def train(arguments):
                 # Error visualisation
                 errors = model.get_current_errors()
                 stats = model.get_segmentation_stats()
+                # logging.debug("val/test errors {}".format(errors))
+                # logging.debug("val/test stats {}".format(stats))
 
                 merged_dict = {}
                 merged_dict.update(errors)

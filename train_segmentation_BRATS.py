@@ -14,6 +14,8 @@ import time
 import os
 import numpy as np
 
+from torch.nn import DataParallel
+import torch
 
 def datestr():
     now = time.gmtime()
@@ -96,15 +98,18 @@ def train(arguments):
 
     # Setup Data Loader
     train_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_train,
-                             keywords=modality, mode='train', transform=ds_transform['train'])
+                             keywords=modality, mode='train', transform=ds_transform['train'], augment_scale=4)
     valid_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
                              keywords=modality, mode='val', transform=ds_transform['valid'])
     test_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
                             keywords=modality, mode='test',  transform=ds_transform['valid'])
 
-    train_loader = DataLoader(dataset=train_dataset, num_workers=8, batch_size=train_opts.batchSize, shuffle=True)
-    valid_loader = DataLoader(dataset=valid_dataset, num_workers=8, batch_size=train_opts.batchSize, shuffle=False)
-    test_loader = DataLoader(dataset=test_dataset, num_workers=8, batch_size=train_opts.batchSize, shuffle=False)
+    train_loader = DataLoader(dataset=train_dataset, num_workers=8,
+                              batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=True)
+    valid_loader = DataLoader(dataset=valid_dataset, num_workers=8,
+                              batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=False)
+    test_loader = DataLoader(dataset=test_dataset, num_workers=8,
+                             batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=False)
 
     # Visualisation Parameters
     visualizer = Visualiser(json_opts.visualisation, save_dir=model.save_dir)
@@ -112,6 +117,9 @@ def train(arguments):
 
     # Training Function
     model.set_scheduler(train_opts)
+
+    # logging.debug("current device {}".format(torch.cuda.current_device()))
+
     for epoch in range(model.which_epoch, train_opts.n_epochs):
         print('(epoch: %d, total # iters: %d)' % (epoch, len(train_loader)))
 

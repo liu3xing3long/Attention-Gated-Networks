@@ -11,6 +11,8 @@ from .layers.loss import *
 from .networks_other import get_scheduler, print_network, benchmark_fp_bp_time
 from .utils import segmentation_stats, get_optimizer, get_criterion, tensor2im
 from .networks.utils import HookBasedFeatureExtractor
+from torch.nn import DataParallel
+import torch.nn.functional as F
 
 
 class FeedForwardSegmentation(BaseModel):
@@ -33,6 +35,8 @@ class FeedForwardSegmentation(BaseModel):
                                tensor_dim=opts.tensor_dim, feature_scale=opts.feature_scale,
                                attention_dsample=opts.attention_dsample)
         if self.use_cuda:
+            logging.debug("setting up dataparallel on {} gpus".format(self.gpu_ids))
+            self.net = DataParallel(self.net, device_ids=self.gpu_ids)
             self.net = self.net.cuda()
 
         # load the model if a path is specified or it is in inference mode
@@ -56,7 +60,7 @@ class FeedForwardSegmentation(BaseModel):
 
             # logging.debug the network details
             # logging.debug the network details
-            if kwargs.get('verbose', False):
+            if kwargs.get('verbose', True):
                 logging.debug('Network is initialized')
                 print_network(self.net)
 
@@ -75,9 +79,21 @@ class FeedForwardSegmentation(BaseModel):
 
             # Define that it's a cuda array
             if idx == 0:
-                self.input = _input.cuda() if self.use_cuda else _input
+                if self.use_cuda:
+                    self.input = _input.cuda()
+                    # logging.debug("moving input {} to cuda".format(self.input.size()))
+                else:
+                    self.input = _input
+                    # logging.debug("moving input {} to cpu".format(self.input.size()))
+
             elif idx == 1:
-                self.target = Variable(_input.cuda()) if self.use_cuda else Variable(_input)
+                if self.use_cuda:
+                    self.target = Variable(_input.cuda())
+                    # logging.debug("moving target {} to cuda".format(self.target.size()))
+                else:
+                    self.target = Variable(_input)
+                    # logging.debug("moving target {} to cpu".format(self.target.size()))
+
                 assert self.input.size() == self.target.size()
 
     def forward(self, split):
@@ -86,7 +102,8 @@ class FeedForwardSegmentation(BaseModel):
         elif split == 'test':
             self.prediction = self.net(Variable(self.input, volatile=True))
             # Apply a softmax and return a segmentation map
-            self.logits = self.net.apply_argmax_softmax(self.prediction)
+            # self.logits = self.net.apply_argmax_softmax(self.prediction)
+            self.logits = F.softmax(self.prediction, dim=1)
             self.pred_seg = self.logits.data.max(1)[1].unsqueeze(1)
 
     def backward(self):

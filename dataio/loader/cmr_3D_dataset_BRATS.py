@@ -11,11 +11,12 @@ import logging
 import SimpleITK as sitk
 from tqdm import tqdm
 import torchsample.transforms as ts
+from collections import OrderedDict
 
 
 class CMR3DDatasetBRATS(data.Dataset):
     def __init__(self, dataset_folder, subset_folder, label_folder, data_subsets, keywords=["P1", "1", "flair"],
-                 mode='train', transform=None, augment_scale=0):
+                 mode='train', transform=None, aug_opts=None):
         super(CMR3DDatasetBRATS, self).__init__()
 
         self.rawim = {}
@@ -24,20 +25,43 @@ class CMR3DDatasetBRATS(data.Dataset):
         self.train_mode = mode == 'train'
         self.test_mode = mode == 'test'
         self.val_mode = mode == 'val'
-        self.data_path_map = {}
+        self.data_path_map = OrderedDict()
         self.data_name_vec = []
-        self.augment_scale = augment_scale
+
         self.origin_size = 0
-        self.preload = False
-        self.scale_size = [192, 192, 96]
-        self.patch_size = [192, 192, 96]
+
+        if aug_opts is None:
+            self.preload = False
+        else:
+            self.preload = aug_opts.preload_data
+
+        if self.train_mode:
+            if aug_opts is None:
+                self.augment_scale = 0
+            else:
+                self.augment_scale = aug_opts.augment_scale
+
+            if aug_opts is None:
+                self.scale_size = [128, 128, 96]
+                self.patch_size = [128, 128, 96]
+            else:
+                self.scale_size = aug_opts.scale_size
+                self.patch_size = aug_opts.patch_size
+        elif self.val_mode or self.test_mode:
+            # no aug_scale for val and test data
+            self.augment_scale = 0
+            if aug_opts is None:
+                self.scale_size = [128, 128, 96]
+                self.patch_size = [128, 128, 96]
+            else:
+                self.scale_size = aug_opts.scale_size
+                self.patch_size = aug_opts.patch_size
 
         # read csv settings
         csv_folder = os.path.join(dataset_folder, label_folder)
 
         # since we have LGG and HGG two folders...
         # data_name ---> data_folder_path
-        self.data_path_map = {}
         for subset in data_subsets:
             df = pd.read_csv(os.path.join(csv_folder, "subset_{}.csv".format(subset)), header=None)
             for df_idx, df_row in df.iterrows():
@@ -67,13 +91,13 @@ class CMR3DDatasetBRATS(data.Dataset):
                 mask_arr = mask_arr.astype(np.float)
                 # z, y, x -> x, y, z
                 mask_arr = np.transpose(mask_arr, [2, 1, 0])
-                # mask_arr[mask_arr > 0] = 1
+                mask_arr[mask_arr > 0] = 1
 
-                new_mask_arr = np.zeros(mask_arr.shape)
-                new_mask_arr[mask_arr == 1] = 3
-                new_mask_arr[mask_arr == 4] = 2
-                new_mask_arr[mask_arr > 0] = 1
-                mask_arr = new_mask_arr
+                # new_mask_arr = np.zeros(mask_arr.shape)
+                # new_mask_arr[mask_arr == 1] = 3
+                # new_mask_arr[mask_arr == 4] = 2
+                # new_mask_arr[mask_arr > 0] = 1
+                # mask_arr = new_mask_arr
 
                 self.rawmask.append(mask_arr)
 

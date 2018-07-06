@@ -78,10 +78,10 @@ class _GridAttentionBlockND(nn.Module):
             raise NotImplementedError('Unknown operation function.')
 
         # gpu_ids = [0, 1, 2, 3]
-        # self.W = nn.DataParallel(self.W).cuda()
-        # self.phi = nn.DataParallel(self.phi).cuda()
-        # self.psi = nn.DataParallel(self.psi).cuda()
-        # self.theta = nn.DataParallel(self.theta).cuda()
+        # self.W = nn.DataParallel(self.W)
+        # self.phi = nn.DataParallel(self.phi)
+        # self.psi = nn.DataParallel(self.psi)
+        # self.theta = nn.DataParallel(self.theta)
 
     def forward(self, x, g):
         '''
@@ -89,9 +89,19 @@ class _GridAttentionBlockND(nn.Module):
         :param g: (b, g_d)
         :return:
         '''
+        input_device_id = x.data.get_device()
+        # self.W = self.W.cuda(input_device_id)
+        # self.phi = self.phi.cuda(input_device_id)
+        # self.psi = self.psi.cuda(input_device_id)
+        # self.theta = self.theta.cuda(input_device_id)
+
+        x = x.cuda(0)
+        g = g.cuda(0)
 
         # print "before operation size {} on device {}".format(x.size(), x.data.get_device())
         output = self.operation_function(x, g)
+        output = (output[0].cuda(input_device_id), output[1].cuda(input_device_id))
+
         # print "after operation size {} on device {}".format(output[0].size(), output[0].data.get_device())
 
         return output
@@ -100,8 +110,7 @@ class _GridAttentionBlockND(nn.Module):
         input_size = x.size()
         batch_size = input_size[0]
         assert batch_size == g.size(0)
-
-        # print "input size {} on device {}".format(input_size, x.data.get_device())
+        # print "x size {} on device {}".format(input_size, x.data.get_device())
 
         # theta => (b, c, t, h, w) -> (b, i_c, t, h, w) -> (b, i_c, thw)
         # phi   => (b, g_d) -> (b, i_c)
@@ -238,6 +247,7 @@ class _GridAttentionBlockND_TORR(nn.Module):
             bn = nn.BatchNorm2d
             self.upsample_mode = 'bilinear'
         else:
+            # print "given dimension {} not found".format(dimension)
             raise NotImplemented
 
         # initialise id functions
@@ -280,6 +290,7 @@ class _GridAttentionBlockND_TORR(nn.Module):
         if 'concatenation' in mode:
             self.operation_function = self._concatenation
         else:
+            # print "given mode {} not found".format(mode)
             raise NotImplementedError('Unknown operation function.')
 
         # Initialise weights
@@ -415,6 +426,7 @@ class GridAttentionBlock3D_TORR(_GridAttentionBlockND_TORR):
 
 if __name__ == '__main__':
     from torch.autograd import Variable
+    from torch.nn import DataParallel
 
     mode_list = ['concatenation']
 
@@ -424,5 +436,7 @@ if __name__ == '__main__':
         gat = Variable(torch.rand(2, 64, 4, 4, 4))
         net = GridAttentionBlock3D(in_channels=16, inter_channels=16, gating_channels=64, mode=mode,
                                    sub_sample_factor=(2, 2, 2))
+        net = DataParallel(net, device_ids=[0,1,2,3])
         out, sigma = net(img, gat)
+
         print(out.size())

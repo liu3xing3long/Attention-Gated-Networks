@@ -36,14 +36,18 @@ class FeedForwardSegmentation(BaseModel):
                                attention_dsample=opts.attention_dsample)
         if self.use_cuda:
             logging.debug("setting up dataparallel on {} gpus".format(self.gpu_ids))
-            self.net = DataParallel(self.net, device_ids=self.gpu_ids)
             self.net = self.net.cuda()
+            self.net = DataParallel(self.net, device_ids=self.gpu_ids)
+
+            # for this_net in rep_net:
+            #     for name, param in this_net.named_parameters():
+            #         logging.debug("param {} on GPU {}".format(name, param.get_device()))
 
             for name, param in self.net.named_parameters():
                 if not param.is_cuda:
                     logging.debug("!!!!!! {} not on GPU !!!!!!".format(name))
                 # else:
-                #     logging.debug("param {} on GPU ".format(name))
+                #     logging.debug("param {} on GPU {}".format(name, param.get_device()))
 
         # load the model if a path is specified or it is in inference mode
         if not self.isTrain or opts.continue_train:
@@ -64,7 +68,10 @@ class FeedForwardSegmentation(BaseModel):
             self.optimizer_S = get_optimizer(opts, self.net.parameters())
             self.optimizers.append(self.optimizer_S)
 
-            # logging.debug the network details
+            if self.use_cuda:
+                # self.criterion = DataParallel(self.criterion)
+                self.criterion = self.criterion.cuda()
+
             # logging.debug the network details
             if kwargs.get('verbose', False):
                 logging.debug('Network is initialized')
@@ -102,11 +109,15 @@ class FeedForwardSegmentation(BaseModel):
 
                 assert self.input.size() == self.target.size()
 
+        # print "input size {} on device {}".format(self.input.size(), self.input.get_device())
+        # print "target size {} on device {}".format(self.target.size(), self.target.data.get_device())
+
     def forward(self, split):
         if split == 'train':
-            # logging.debug("model on {}".format(self.net.module.get_device()))
-            # logging.debug("data on {}".format(self.input.get_device()))
+            # logging.debug("forward data size {} on {}".format(self.input.size(), self.input.get_device()))
             self.prediction = self.net(Variable(self.input))
+            # self.prediction = self.data_parallel2(module=self.net, inputs=Variable(self.input), device_ids=self.gpu_ids)
+            # self.prediction = self.data_parallel(module=self.net, inputs=Variable(self.input), device_ids=self.gpu_ids)
 
         elif split == 'test':
             self.prediction = self.net(Variable(self.input, volatile=True))
@@ -115,6 +126,58 @@ class FeedForwardSegmentation(BaseModel):
             self.logits = F.softmax(self.prediction, dim=1)
             self.pred_seg = self.logits.data.max(1)[1].unsqueeze(1)
 
+    # def scatter_kwargs(self, inputs, kwargs, target_gpus, dim=0):
+    #     r"""Scatter with support for kwargs dictionary"""
+    #     inputs = nn.parallel.scatter(inputs, target_gpus, dim) if inputs else []
+    #     kwargs = nn.parallel.scatter(kwargs, target_gpus, dim) if kwargs else []
+    #     if len(inputs) < len(kwargs):
+    #         inputs.extend([() for _ in range(len(kwargs) - len(inputs))])
+    #     elif len(kwargs) < len(inputs):
+    #         kwargs.extend([{} for _ in range(len(inputs) - len(kwargs))])
+    #     inputs = tuple(inputs)
+    #     kwargs = tuple(kwargs)
+    #     return inputs, kwargs
+    #
+    # def data_parallel2(self, module, inputs, device_ids, output_device=None):
+    #     if not device_ids:
+    #         return module(inputs)
+    #
+    #     if output_device is None:
+    #         output_device = device_ids[0]
+    #
+    #     if not isinstance(inputs, tuple):
+    #         inputs = (inputs,)
+    #
+    #     inputs = nn.parallel.scatter(inputs, device_ids)
+    #     # logging.debug("scatter input length {}".format(len(inputs)))
+    #     inputs = tuple(inputs)
+    #
+    #     replicas = nn.parallel.replicate(module, device_ids)
+    #     replicas = replicas[:len(inputs)]
+    #     # logging.debug("rep length {}".format(len(replicas)))
+    #
+    #     outputs = nn.parallel.parallel_apply(replicas, inputs, None, device_ids)
+    #     return nn.parallel.gather(outputs, output_device)
+    #
+    # def data_parallel(self, module, inputs, device_ids, output_device=None):
+    #     if not isinstance(inputs, tuple):
+    #         inputs = (inputs,)
+    #
+    #     if device_ids is None:
+    #         device_ids = list(range(torch.cuda.device_count()))
+    #
+    #     if output_device is None:
+    #         output_device = device_ids[0]
+    #
+    #     inputs, module_kwargs = self.scatter_kwargs(inputs, None, device_ids, 0)
+    #     if len(device_ids) == 1:
+    #         return module(*inputs[0], **module_kwargs[0])
+    #     used_device_ids = device_ids[:len(inputs)]
+    #     replicas = nn.parallel.replicate(module, used_device_ids)
+    #
+    #     outputs = nn.parallel.parallel_apply(replicas, inputs, None, used_device_ids)
+    #     return nn.parallel.gather(outputs, output_device, 0)
+
     def backward(self):
         self.loss_S = self.criterion(self.prediction, self.target)
         self.loss_S.backward()
@@ -122,7 +185,6 @@ class FeedForwardSegmentation(BaseModel):
     def optimize_parameters(self):
         self.net.train()
         self.forward(split='train')
-
         self.optimizer_S.zero_grad()
         self.backward()
         self.optimizer_S.step()

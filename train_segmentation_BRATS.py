@@ -52,6 +52,7 @@ def train(arguments):
     json_opts = json_file_to_pyobj(json_filename)
     train_opts = json_opts.training
     model_opts = json_opts.model
+    augmentation_opts = json_opts.augmentation
 
     # Architecture type
     arch_type = train_opts.arch_type
@@ -70,7 +71,9 @@ def train(arguments):
     # Setup Dataset and Augmentation
     ds_class = get_dataset(arch_type)
     ds_path = get_dataset_path(arch_type, json_opts.data_path)
-    ds_transform = get_dataset_transformation(arch_type, opts=json_opts.augmentation)
+    ds_transform = get_dataset_transformation(arch_type, opts=augmentation_opts)
+
+    this_arch_aug_opts = getattr(augmentation_opts, arch_type)
 
     # data paths
     DATA_FOLDER = ds_path
@@ -96,13 +99,16 @@ def train(arguments):
         print('fp time: {0:.3f} sec\tbp time: {1:.3f} sec per sample'.format(*model.get_fp_bp_time()))
         exit()
 
-    # Setup Data Loader
+    # Setup Data Loader`
     train_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_train,
-                             keywords=modality, mode='train', transform=ds_transform['train'], augment_scale=2)
+                             keywords=modality, mode='train', transform=ds_transform['train'],
+                             aug_opts=this_arch_aug_opts)
     valid_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
-                             keywords=modality, mode='val', transform=ds_transform['valid'])
+                             keywords=modality, mode='val', transform=ds_transform['valid'],
+                             aug_opts=this_arch_aug_opts)
     test_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
-                            keywords=modality, mode='test',  transform=ds_transform['valid'])
+                            keywords=modality, mode='test',  transform=ds_transform['valid'],
+                            aug_opts=this_arch_aug_opts)
 
     train_loader = DataLoader(dataset=train_dataset, num_workers=8,
                               batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=True)

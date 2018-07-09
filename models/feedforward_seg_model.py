@@ -106,8 +106,11 @@ class FeedForwardSegmentation(BaseModel):
                 else:
                     self.target = Variable(_input)
                     # logging.debug("moving target {} to cpu".format(self.target.size()))
-
                 assert self.input.size() == self.target.size()
+
+                # batch x channel x Z x Y x X -> batch x 1 x Z x Y x X
+                if self.target.size(1) > 1:
+                    self.target = torch.unsqueeze(self.target[:, 0, ...], 1)
 
         # print "input size {} on device {}".format(self.input.size(), self.input.get_device())
         # print "target size {} on device {}".format(self.target.size(), self.target.data.get_device())
@@ -116,8 +119,6 @@ class FeedForwardSegmentation(BaseModel):
         if split == 'train':
             # logging.debug("forward data size {} on {}".format(self.input.size(), self.input.get_device()))
             self.prediction = self.net(Variable(self.input))
-            # self.prediction = self.data_parallel2(module=self.net, inputs=Variable(self.input), device_ids=self.gpu_ids)
-            # self.prediction = self.data_parallel(module=self.net, inputs=Variable(self.input), device_ids=self.gpu_ids)
 
         elif split == 'test':
             self.prediction = self.net(Variable(self.input, volatile=True))
@@ -125,58 +126,6 @@ class FeedForwardSegmentation(BaseModel):
             # self.logits = self.net.apply_argmax_softmax(self.prediction)
             self.logits = F.softmax(self.prediction, dim=1)
             self.pred_seg = self.logits.data.max(1)[1].unsqueeze(1)
-
-    # def scatter_kwargs(self, inputs, kwargs, target_gpus, dim=0):
-    #     r"""Scatter with support for kwargs dictionary"""
-    #     inputs = nn.parallel.scatter(inputs, target_gpus, dim) if inputs else []
-    #     kwargs = nn.parallel.scatter(kwargs, target_gpus, dim) if kwargs else []
-    #     if len(inputs) < len(kwargs):
-    #         inputs.extend([() for _ in range(len(kwargs) - len(inputs))])
-    #     elif len(kwargs) < len(inputs):
-    #         kwargs.extend([{} for _ in range(len(inputs) - len(kwargs))])
-    #     inputs = tuple(inputs)
-    #     kwargs = tuple(kwargs)
-    #     return inputs, kwargs
-    #
-    # def data_parallel2(self, module, inputs, device_ids, output_device=None):
-    #     if not device_ids:
-    #         return module(inputs)
-    #
-    #     if output_device is None:
-    #         output_device = device_ids[0]
-    #
-    #     if not isinstance(inputs, tuple):
-    #         inputs = (inputs,)
-    #
-    #     inputs = nn.parallel.scatter(inputs, device_ids)
-    #     # logging.debug("scatter input length {}".format(len(inputs)))
-    #     inputs = tuple(inputs)
-    #
-    #     replicas = nn.parallel.replicate(module, device_ids)
-    #     replicas = replicas[:len(inputs)]
-    #     # logging.debug("rep length {}".format(len(replicas)))
-    #
-    #     outputs = nn.parallel.parallel_apply(replicas, inputs, None, device_ids)
-    #     return nn.parallel.gather(outputs, output_device)
-    #
-    # def data_parallel(self, module, inputs, device_ids, output_device=None):
-    #     if not isinstance(inputs, tuple):
-    #         inputs = (inputs,)
-    #
-    #     if device_ids is None:
-    #         device_ids = list(range(torch.cuda.device_count()))
-    #
-    #     if output_device is None:
-    #         output_device = device_ids[0]
-    #
-    #     inputs, module_kwargs = self.scatter_kwargs(inputs, None, device_ids, 0)
-    #     if len(device_ids) == 1:
-    #         return module(*inputs[0], **module_kwargs[0])
-    #     used_device_ids = device_ids[:len(inputs)]
-    #     replicas = nn.parallel.replicate(module, used_device_ids)
-    #
-    #     outputs = nn.parallel.parallel_apply(replicas, inputs, None, used_device_ids)
-    #     return nn.parallel.gather(outputs, output_device, 0)
 
     def backward(self):
         self.loss_S = self.criterion(self.prediction, self.target)
@@ -222,9 +171,15 @@ class FeedForwardSegmentation(BaseModel):
         return OrderedDict([('Seg_Loss', self.loss_S.data[0])
                             ])
 
-    def get_current_visuals(self):
-        inp_img = tensor2im(self.input, 'img')
-        seg_img = tensor2im(self.pred_seg, 'lbl')
+    def get_current_visuals(self, outchannel=0):
+        if self.net.training:
+            inp_img = tensor2im(self.input, 'img')
+            seg_img = tensor2im(self.target.data.cpu(), 'lbl')
+        else:
+            # inp_img = tensor2im(self.input, 'img')
+            inp_img = tensor2im(self.input, 'img')
+            seg_img = tensor2im(self.pred_seg, 'lbl')
+
         return OrderedDict([('out_S', seg_img), ('inp_S', inp_img)])
 
     def get_feature_maps(self, layer_name, upscale):

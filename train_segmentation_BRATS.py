@@ -110,11 +110,12 @@ def train(arguments):
                             keywords=modality, mode='test',  transform=ds_transform['valid'],
                             aug_opts=this_arch_aug_opts)
 
-    train_loader = DataLoader(dataset=train_dataset, num_workers=8,
+    num_workers = 1
+    train_loader = DataLoader(dataset=train_dataset, num_workers=num_workers,
                               batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=True)
-    valid_loader = DataLoader(dataset=valid_dataset, num_workers=8,
+    valid_loader = DataLoader(dataset=valid_dataset, num_workers=num_workers,
                               batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=False)
-    test_loader = DataLoader(dataset=test_dataset, num_workers=8,
+    test_loader = DataLoader(dataset=test_dataset, num_workers=num_workers,
                              batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=False)
 
     # Visualisation Parameters
@@ -140,6 +141,10 @@ def train(arguments):
             errors = model.get_current_errors()
             # logging.debug("train errors {}".format(errors))
             error_logger.update(errors, split='train')
+
+            # show images
+            # visuals = model.get_current_visuals()
+            # visualizer.display_current_results(visuals, epoch=epoch, save_result=False)
 
         # Validation and Testing Iterations
         for loader, split in zip([valid_loader, test_loader], ['validation', 'test']):

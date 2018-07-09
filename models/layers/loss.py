@@ -82,7 +82,7 @@ class One_Hot(nn.Module):
         n_dim = X_in.dim()
         output_size = X_in.size() + torch.Size([self.depth])
         num_element = X_in.numel()
-        X_in = X_in.data.long().view(num_element)
+        X_in = X_in.data.long().contiguous().view(num_element)
         out = Variable(self.ones.index_select(0, X_in)).view(output_size)
         return out.permute(0, -1, *range(1, n_dim)).squeeze(dim=2).float()
 

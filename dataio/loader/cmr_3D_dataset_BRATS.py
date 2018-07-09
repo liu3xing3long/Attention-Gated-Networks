@@ -1,17 +1,20 @@
-import torch.utils.data as data
-import numpy as np
-import datetime
-
-from os import listdir
 import os
-# from os.path import join
-from .utils import load_nifti_img, check_exceptions, is_image_file
-import pandas as pd
-import logging
-import SimpleITK as sitk
-from tqdm import tqdm
-import torchsample.transforms as ts
+import datetime
 from collections import OrderedDict
+import random
+import logging
+
+import SimpleITK as sitk
+# import nibabel as nib
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+
+import torchsample.transforms as ts
+import torch
+import torch.utils.data as data
+
+from .utils import load_nifti_img, check_exceptions, is_image_file
 
 
 class CMR3DDatasetBRATS(data.Dataset):
@@ -27,6 +30,11 @@ class CMR3DDatasetBRATS(data.Dataset):
         self.val_mode = mode == 'val'
         self.data_path_map = OrderedDict()
         self.data_name_vec = []
+
+        self.affine_shift_val = (0.1, 0.1)
+        self.affine_rotate_val = 15.0
+        self.affine_scale_val = (0.7, 1.3)
+        self.random_flip_prob = 0.5
 
         self.origin_size = 0
 
@@ -108,7 +116,7 @@ class CMR3DDatasetBRATS(data.Dataset):
                     abs_image_path = os.path.join(data_real_folder, image_name)
                     # logging.debug("reading image from {}".format(abs_image_path))
 
-                    im = sitk.ReadImage(os.path.join(data_real_folder, image_name))
+                    im = sitk.ReadImage(abs_image_path)
                     im_arr = sitk.GetArrayFromImage(im)
                     im_arr = im_arr.astype(np.float)
                     # z, y, x -> x, y, z
@@ -124,13 +132,14 @@ class CMR3DDatasetBRATS(data.Dataset):
             self.rawmask = np.array(self.rawmask)
             # output data shapes
             for keywd in self.keywords:
-                logging.debug("data shape for modality {} in {} mode is {}".format(keywd, mode, self.rawim[keywd].shape))
+                logging.debug(
+                        "data shape for modality {} in {} mode is {}".format(keywd, mode, self.rawim[keywd].shape))
             logging.debug("mask shape in {} mode is {}".format(mode, self.rawmask.shape))
 
             # debug infor output
             logging.debug("total voxels {}, valid voxels {}, rate {}".format(self.rawmask.size, np.sum(self.rawmask),
                                                                              np.sum(self.rawmask) / self.rawmask.size))
-            self.origin_size = self.rawmask.shape[0]
+            self.origin_size = len(self.data_name_vec)
 
         else:
             self.origin_size = len(self.data_name_vec)
@@ -159,27 +168,7 @@ class CMR3DDatasetBRATS(data.Dataset):
             img_tr = np.array(img_tr)
             mask_tr = np.array(mask_tr)
 
-            if len(img_tr.shape) == 4:
-                img_tr = img_tr[0, ...]
-            if len(mask_tr.shape) == 4:
-                mask_tr = mask_tr[0, ...]
-
-            # handle exceptions
-            check_exceptions(img_tr, mask_tr)
-            if b_aug:
-                if self.transform is not None:
-                    img_tr, mask_tr = self.transform(img_tr, mask_tr)
-            else:
-                transform = ts.Compose([ts.PadNumpy(size=self.scale_size),
-                                        ts.ToTensor(),
-                                        ts.ChannelsFirst(),
-                                        ts.TypeCast(['float', 'float']),
-                                        ts.NormalizeMedic(norm_flag=(True, False)),
-                                        ts.ChannelsLast(),
-                                        ts.AddChannel(axis=0),
-                                        ts.RandomCrop(size=self.patch_size),
-                                        ts.TypeCast(['float', 'long'])])
-                img_tr, mask_tr = transform(img_tr, mask_tr)
+            img_tr, mask_tr = self.augment(img_tr, mask_tr, b_aug=b_aug)
 
             return img_tr, mask_tr
 
@@ -192,17 +181,17 @@ class CMR3DDatasetBRATS(data.Dataset):
             abs_image_path = os.path.join(data_real_folder, mask_name)
             # logging.debug("reading mask from {}".format(abs_image_path))
 
-            img_tr, mask_tr = None, None
-
+            img_tr, mask_tr = [], []
             mask = sitk.ReadImage(abs_image_path)
-            mask_tr = sitk.GetArrayFromImage(mask)
-            mask_arr_d, mask_arr_h, mask_arr_w = mask_tr.shape
-
-            mask_tr = mask_tr.astype(np.float)
+            mask_arr = sitk.GetArrayFromImage(mask)
+            mask_arr_d, mask_arr_h, mask_arr_w = mask_arr.shape
+            mask_arr = mask_arr.astype(np.float)
             # z, y, x -> x, y, z
-            mask_tr = np.transpose(mask_tr, [2, 1, 0])
+            mask_arr = np.transpose(mask_arr, [2, 1, 0])
+            mask_arr[mask_arr > 0] = 1
+            mask_tr.append(mask_arr)
 
-            mask_tr[mask_tr > 0] = 1
+            mask_tr = np.array(mask_tr)
 
             # update multi
             # new_mask_arr = np.zeros(mask_tr.shape)
@@ -218,36 +207,137 @@ class CMR3DDatasetBRATS(data.Dataset):
                 abs_image_path = os.path.join(data_real_folder, image_name)
                 # logging.debug("reading image from {}".format(abs_image_path))
                 im = sitk.ReadImage(abs_image_path)
-                img_tr = sitk.GetArrayFromImage(im)
-                img_tr = img_tr.astype(np.float)
+                img_arr = sitk.GetArrayFromImage(im)
+                img_arr = img_arr.astype(np.float)
                 # z, y, x -> x, y, z
-                img_tr = np.transpose(img_tr, [2, 1, 0])
+                img_arr = np.transpose(img_arr, [2, 1, 0])
+                img_tr.append(img_arr)
+            img_tr = np.array(img_tr)
 
-            if len(img_tr.shape) == 4:
-                img_tr = img_tr[0, ...]
-            if len(mask_tr.shape) == 4:
-                mask_tr = mask_tr[0, ...]
-
-            # handle exceptions
-            check_exceptions(img_tr, mask_tr)
-
-            # logging.debug("mask max {}, min {}, mean {}".format(np.max(mask_tr),  np.min(mask_tr), np.mean(mask_tr)))
-            if self.transform is not None:
-                img_tr, mask_tr = self.transform(img_tr, mask_tr)
-
-            else:
-                transform = ts.Compose([ts.PadNumpy(size=self.scale_size),
-                                        ts.ToTensor(),
-                                        ts.ChannelsFirst(),
-                                        ts.TypeCast(['float', 'float']),
-                                        ts.NormalizeMedic(norm_flag=(True, False)),
-                                        ts.ChannelsLast(),
-                                        ts.AddChannel(axis=0),
-                                        ts.RandomCrop(size=self.patch_size),
-                                        ts.TypeCast(['float', 'long'])])
-                img_tr, mask_tr = transform(img_tr, mask_tr)
+            img_tr, mask_tr = self.augment(img_tr, mask_tr, b_aug=b_aug)
 
             return img_tr, mask_tr
 
     def __len__(self):
         return self.origin_size * (self.augment_scale + 1)
+
+    def augment(self, img_tr, mask_tr, b_aug=True):
+        # channel x X x Y x Z
+        input_dim = len(img_tr.shape)
+        # logging.debug("augment input dim {}".format(input_dim))
+
+        tensor_img, tensor_mask = [], []
+        #################################
+        pre_transform = ts.Compose([
+            ts.PadNumpy(size=self.scale_size),
+            ts.ToTensor(),
+            ts.ChannelsFirst(),
+            ts.TypeCast(['float', 'float'])])
+
+        for kw_idx in xrange(len(self.keywords)):
+            if kw_idx == 0:
+                tmp_tensor_img, tmp_tensor_mask = pre_transform(img_tr[kw_idx, ...], mask_tr[kw_idx, ...])
+                tensor_img.append(tmp_tensor_img)
+                tensor_mask.append(tmp_tensor_mask)
+            else:
+                tmp_tensor_img = pre_transform(img_tr[kw_idx, ...])
+                tensor_img.append(tmp_tensor_img)
+
+        # cat
+        tensor_img = torch.stack(tensor_img)
+        tensor_mask = torch.stack(tensor_mask)
+        # logging.debug("tensor image shape {}, tensor mask shape {}".format(tensor_img.shape, tensor_mask.shape))
+
+        if b_aug:
+            #################################
+            # augment !
+            # 4D image NOT supported...
+            # split 4D image into 3D...
+            # flip
+            if random.random() < self.random_flip_prob:
+                h_flip_op = ts.RandomFlip(h=True, v=False, p=1.0)
+                for kw_idx in xrange(len(self.keywords)):
+                    if kw_idx == 0:
+                        tensor_img[kw_idx, ...], tensor_mask[kw_idx, ...] = h_flip_op(tensor_img[kw_idx, ...],
+                                                                                      tensor_mask[kw_idx, ...])
+                    else:
+                        tensor_img[kw_idx, ...] = h_flip_op(tensor_img[kw_idx, ...])
+
+            # logging.debug("tensor image shape {}, tensor mask shape {}".format(tensor_img.shape, tensor_mask.shape))
+
+            if random.random() < self.random_flip_prob:
+                v_flip_op = ts.RandomFlip(h=False, v=True, p=1.0)
+                for kw_idx in xrange(len(self.keywords)):
+                    if kw_idx == 0:
+                        tensor_img[kw_idx, ...], tensor_mask[kw_idx, ...] = v_flip_op(tensor_img[kw_idx, ...],
+                                                                                      tensor_mask[kw_idx, ...])
+                    else:
+                        tensor_img[kw_idx, ...] = v_flip_op(tensor_img[kw_idx, ...])
+            # logging.debug("tensor image shape {}, tensor mask shape {}".format(tensor_img.shape, tensor_mask.shape))
+
+            # affine
+            affine_mat_op = ts.RandomAffine(rotation_range=self.affine_rotate_val,
+                                            translation_range=self.affine_shift_val,
+                                            zoom_range=self.affine_scale_val, lazy=True)
+            # cal matrix using #0 element
+            affine_mat = affine_mat_op(tensor_img[0, ...], tensor_mask[0, ...])
+
+            for kw_idx in xrange(len(self.keywords)):
+                affine_op = ts.Affine(tform_matrix=affine_mat, interp=('bilinear', 'nearest'))
+                if kw_idx == 0:
+                    tensor_img[kw_idx, ...], tensor_mask[kw_idx, ...] = affine_op(tensor_img[kw_idx, ...],
+                                                                                  tensor_mask[kw_idx, ...])
+                else:
+                    tensor_img[kw_idx, ...] = affine_op(tensor_img[kw_idx, ...])
+
+        #
+        # DUE to channel permute operations, the Tensor Object must be
+        # cleared since the original size have changed
+        #
+        tensor_img_out, tensor_mask_out = [], []
+        mid_transform = ts.Compose([ts.NormalizeMedic(norm_flag=(True, False)), ts.ChannelsLast()])
+        for kw_idx in xrange(len(self.keywords)):
+            if kw_idx == 0:
+                tmp_tensor_img, tmp_tensor_mask = mid_transform(tensor_img[kw_idx, ...], tensor_mask[kw_idx, ...])
+                tensor_img_out.append(tmp_tensor_img)
+
+                # duplicate the mask since the last_transform needs
+                # image and mask share same sizes
+                for expand_times in xrange(len(self.keywords)):
+                    tensor_mask_out.append(tmp_tensor_mask)
+            else:
+                tmp_tensor_img = mid_transform(tensor_img[kw_idx, ...])
+                tensor_img_out.append(tmp_tensor_img)
+
+        # cat
+        tensor_img_out = torch.stack(tensor_img_out)
+        tensor_mask_out = torch.stack(tensor_mask_out)
+        # logging.debug("tensor image shape {}, tensor mask shape {}".format(tensor_img.shape, tensor_mask.shape))
+
+        # 3D image need adding channel
+        if input_dim == 3:
+            logging.debug("adding channels at 0 axis")
+            ch_add_op = ts.AddChannel(axis=0)
+            tensor_img_out = ch_add_op(tensor_img_out)
+            tensor_mask_out = ch_add_op(tensor_mask_out)
+
+        #################################
+        # crop
+        # 4D image supported... channel first
+        if b_aug:
+            last_transform = ts.Compose([
+                ts.RandomCrop(size=self.patch_size),
+                ts.TypeCast(['float', 'long'])])
+        else:
+            last_transform = ts.Compose([
+                ts.SpecialCrop(size=self.patch_size, crop_type=0),
+                ts.TypeCast(['float', 'long'])])
+
+        tensor_img_out, tensor_mask_out = last_transform(tensor_img_out, tensor_mask_out)
+        # logging.debug("augment, tensor image shape {}, tensor mask shape {}".format(tensor_img_out.shape, tensor_mask_out.shape))
+
+        return tensor_img_out, tensor_mask_out
+        # assert np.all(tensor_mask_out[0, ...].numpy() == tensor_mask_out[1, ...].numpy()) and \
+        #        np.all((tensor_mask_out[2, ...].numpy() == tensor_mask_out[3, ...].numpy()))
+        # return torch.unsqueeze(tensor_img_out[0, ...], 0), \
+        #        torch.unsqueeze(tensor_mask_out[2, ...], 0)

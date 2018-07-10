@@ -37,6 +37,8 @@ class CMR3DDatasetBRATS(data.Dataset):
         self.random_flip_prob = 0.5
 
         self.origin_size = 0
+        # self.bbox = np.array([[0, 0, 0], [0, 0, 0]])
+        # self.margin = 8
 
         if aug_opts is None:
             self.preload = False
@@ -107,6 +109,14 @@ class CMR3DDatasetBRATS(data.Dataset):
                 # new_mask_arr[mask_arr > 0] = 1
                 # mask_arr = new_mask_arr
 
+                mask_arr = mask_arr[
+                    max((mask_arr.shape[0] - self.patch_size[0]) / 2, 0):
+                    min(mask_arr.shape[0] - (mask_arr.shape[0] - self.patch_size[0]) / 2, mask_arr.shape[0]),
+                    max((mask_arr.shape[1] - self.patch_size[1]) / 2, 0):
+                    min(mask_arr.shape[1] - (mask_arr.shape[1] - self.patch_size[1]) / 2, mask_arr.shape[1]),
+                    max((mask_arr.shape[2] - self.patch_size[2]) / 2, 0):
+                    min(mask_arr.shape[2] - (mask_arr.shape[2] - self.patch_size[2]) / 2, mask_arr.shape[2])]
+                # print("mask_arr shape {}".format(mask_arr.shape))
                 self.rawmask.append(mask_arr)
 
                 #######################
@@ -122,8 +132,36 @@ class CMR3DDatasetBRATS(data.Dataset):
                     # z, y, x -> x, y, z
                     im_arr = np.transpose(im_arr, [2, 1, 0])
 
+                    # calculate bbox
+                    # im_arr_non_zero = np.where(im_arr > 0)
+                    # this_bbox_min = np.array(
+                    #         [np.min(im_arr_non_zero[0]), np.min(im_arr_non_zero[1]), np.min(im_arr_non_zero[2])])
+                    # this_bbox_max = np.array(
+                    #         [np.max(im_arr_non_zero[0]), np.max(im_arr_non_zero[1]), np.max(im_arr_non_zero[2])])
+                    # logging.debug("data {}, mod {},  size {} -> {}, delta {}".format(data_name, keywd,
+                    #                                                                  this_bbox_min, this_bbox_max,
+                    #                                                                  this_bbox_max - this_bbox_min))
+                    # self.bbox[0] += this_bbox_min
+                    # self.bbox[1] += this_bbox_max
+
+                    im_arr = im_arr[
+                               max((im_arr.shape[0] - self.patch_size[0]) / 2, 0):
+                               min(im_arr.shape[0] - (im_arr.shape[0] - self.patch_size[0]) / 2, im_arr.shape[0]),
+                               max((im_arr.shape[1] - self.patch_size[1]) / 2, 0):
+                               min(im_arr.shape[1] - (im_arr.shape[1] - self.patch_size[1]) / 2, im_arr.shape[1]),
+                               max((im_arr.shape[2] - self.patch_size[2]) / 2, 0):
+                               min(im_arr.shape[2] - (im_arr.shape[2] - self.patch_size[2]) / 2, im_arr.shape[2])]
+                    # print("im_arr shape {}".format(im_arr.shape))
+
                     # append the images
                     self.rawim[keywd].append(im_arr)
+
+            # calculate avg bbox
+            # self.bbox[0] /= (len(self.data_name_vec) * len(self.keywords))
+            # self.bbox[1] /= (len(self.data_name_vec) * len(self.keywords))
+            # to int
+            # self.bbox[0] = np.floor(self.bbox[0])
+            # self.bbox[1] = np.floor(self.bbox[1])
 
             for keywd in self.keywords:
                 # transform to np array
@@ -189,9 +227,6 @@ class CMR3DDatasetBRATS(data.Dataset):
             # z, y, x -> x, y, z
             mask_arr = np.transpose(mask_arr, [2, 1, 0])
             mask_arr[mask_arr > 0] = 1
-            mask_tr.append(mask_arr)
-
-            mask_tr = np.array(mask_tr)
 
             # update multi
             # new_mask_arr = np.zeros(mask_tr.shape)
@@ -199,6 +234,16 @@ class CMR3DDatasetBRATS(data.Dataset):
             # new_mask_arr[mask_tr == 1] = 3
             # new_mask_arr[mask_tr == 4] = 2
             # mask_tr = new_mask_arr
+            mask_arr = mask_arr[
+                       max((mask_arr.shape[0] - self.patch_size[0]) / 2, 0):
+                       min(mask_arr.shape[0] - (mask_arr.shape[0] - self.patch_size[0]) / 2, mask_arr.shape[0]),
+                       max((mask_arr.shape[1] - self.patch_size[1]) / 2, 0):
+                       min(mask_arr.shape[1] - (mask_arr.shape[1] - self.patch_size[1]) / 2, mask_arr.shape[1]),
+                       max((mask_arr.shape[2] - self.patch_size[2]) / 2, 0):
+                       min(mask_arr.shape[2] - (mask_arr.shape[2] - self.patch_size[2]) / 2, mask_arr.shape[2])]
+            # print("mask_arr shape {}".format(mask_arr.shape))
+            mask_tr.append(mask_arr)
+            mask_tr = np.array(mask_tr)
 
             #######################
             # reading real image data
@@ -207,11 +252,29 @@ class CMR3DDatasetBRATS(data.Dataset):
                 abs_image_path = os.path.join(data_real_folder, image_name)
                 # logging.debug("reading image from {}".format(abs_image_path))
                 im = sitk.ReadImage(abs_image_path)
-                img_arr = sitk.GetArrayFromImage(im)
-                img_arr = img_arr.astype(np.float)
+                im_arr = sitk.GetArrayFromImage(im)
+                im_arr = im_arr.astype(np.float)
                 # z, y, x -> x, y, z
-                img_arr = np.transpose(img_arr, [2, 1, 0])
-                img_tr.append(img_arr)
+                im_arr = np.transpose(im_arr, [2, 1, 0])
+
+                # calculate bbox
+                # im_arr_non_zero = np.where(im_arr > 0)
+                # this_bbox_min = np.array(
+                #         [np.min(im_arr_non_zero[0]), np.min(im_arr_non_zero[1]), np.min(im_arr_non_zero[2])])
+                # this_bbox_max = np.array(
+                #         [np.max(im_arr_non_zero[0]), np.max(im_arr_non_zero[1]), np.max(im_arr_non_zero[2])])
+                # self.bbox[0] += this_bbox_min
+                # self.bbox[1] += this_bbox_max
+
+                im_arr = im_arr[
+                         max((im_arr.shape[0] - self.patch_size[0]) / 2, 0):
+                         min(im_arr.shape[0] - (im_arr.shape[0] - self.patch_size[0]) / 2, im_arr.shape[0]),
+                         max((im_arr.shape[1] - self.patch_size[1]) / 2, 0):
+                         min(im_arr.shape[1] - (im_arr.shape[1] - self.patch_size[1]) / 2, im_arr.shape[1]),
+                         max((im_arr.shape[2] - self.patch_size[2]) / 2, 0):
+                         min(im_arr.shape[2] - (im_arr.shape[2] - self.patch_size[2]) / 2, im_arr.shape[2])]
+                img_tr.append(im_arr)
+
             img_tr = np.array(img_tr)
 
             img_tr, mask_tr = self.augment(img_tr, mask_tr, b_aug=b_aug)
@@ -334,7 +397,8 @@ class CMR3DDatasetBRATS(data.Dataset):
                 ts.TypeCast(['float', 'long'])])
 
         tensor_img_out, tensor_mask_out = last_transform(tensor_img_out, tensor_mask_out)
-        # logging.debug("augment, tensor image shape {}, tensor mask shape {}".format(tensor_img_out.shape, tensor_mask_out.shape))
+        # logging.debug("augment, tensor image shape {}, tensor mask shape {}".format( \
+        # tensor_img_out.shape, tensor_mask_out.shape))
 
         return tensor_img_out, tensor_mask_out
         # assert np.all(tensor_mask_out[0, ...].numpy() == tensor_mask_out[1, ...].numpy()) and \

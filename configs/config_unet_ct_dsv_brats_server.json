@@ -24,6 +24,7 @@
   },
   "augmentation": {
     "acdc_sax_brats": {
+      "division_factor": [16,16,1],
       "preload_data": true,
       "augment_scale": 4,
       "shift": [0.1,0.1],
@@ -41,7 +42,6 @@
     "which_epoch": -1,
     "model_type": "unet_ct_multi_att_dsv",
     "tensor_dim": "3D",
-    "division_factor": 16,
     "input_nc": 4,
     "output_nc": 2,
     "lr_rate": 1e-3,

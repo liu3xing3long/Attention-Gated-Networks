@@ -19,7 +19,8 @@ def cross_entropy_3D(input, target, weight=None, size_average=True):
     n, c, h, w, s = input.size()
     log_p = F.log_softmax(input, dim=1)
     log_p = log_p.transpose(1, 2).transpose(2, 3).transpose(3, 4).contiguous().view(-1, c)
-    target = target.view(target.numel())
+    # target = target.view(target.numel())
+    target = target.contiguous().view(target.numel())
     loss = F.nll_loss(log_p, target, weight=weight, size_average=False)
     if size_average:
         loss /= float(target.numel())

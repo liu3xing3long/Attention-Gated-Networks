@@ -68,10 +68,9 @@ class FeedForwardSegmentation(BaseModel):
             self.optimizer_S = get_optimizer(opts, self.net.parameters())
             self.optimizers.append(self.optimizer_S)
 
-            if self.use_cuda:
+            # if self.use_cuda:
                 # self.criterion = DataParallel(self.criterion)
-                self.criterion = self.criterion.cuda()
-
+                # self.criterion = self.criterion.cuda()
             # logging.debug the network details
             if kwargs.get('verbose', False):
                 logging.debug('Network is initialized')

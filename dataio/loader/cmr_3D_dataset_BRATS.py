@@ -38,12 +38,16 @@ class CMR3DDatasetBRATS(data.Dataset):
 
         self.origin_size = 0
         # self.bbox = np.array([[0, 0, 0], [0, 0, 0]])
-        # self.margin = 8
+        self.margin = 8
 
         if aug_opts is None:
             self.preload = False
         else:
             self.preload = aug_opts.preload_data
+            self.affine_scale_val = aug_opts.scale
+            self.affine_rotate_val = aug_opts.rotate
+            self.affine_shift_val = aug_opts.shift
+            self.random_flip_prob = aug_opts.random_flip_prob
 
         if self.train_mode:
             if aug_opts is None:
@@ -90,6 +94,8 @@ class CMR3DDatasetBRATS(data.Dataset):
             for data_name, data_real_folder in tqdm(self.data_path_map.items()):
                 #######################
                 # reading mask data
+                tmp_rawmask = []
+
                 mask_name = "{}_{}.nii.gz".format(data_name, "seg")
                 abs_image_path = os.path.join(data_real_folder, mask_name)
                 # logging.debug("reading mask from {}".format(abs_image_path))
@@ -109,18 +115,19 @@ class CMR3DDatasetBRATS(data.Dataset):
                 # new_mask_arr[mask_arr > 0] = 1
                 # mask_arr = new_mask_arr
 
-                mask_arr = mask_arr[
-                    max((mask_arr.shape[0] - self.patch_size[0]) / 2, 0):
-                    min(mask_arr.shape[0] - (mask_arr.shape[0] - self.patch_size[0]) / 2, mask_arr.shape[0]),
-                    max((mask_arr.shape[1] - self.patch_size[1]) / 2, 0):
-                    min(mask_arr.shape[1] - (mask_arr.shape[1] - self.patch_size[1]) / 2, mask_arr.shape[1]),
-                    max((mask_arr.shape[2] - self.patch_size[2]) / 2, 0):
-                    min(mask_arr.shape[2] - (mask_arr.shape[2] - self.patch_size[2]) / 2, mask_arr.shape[2])]
+                # mask_arr = mask_arr[
+                #     max((mask_arr.shape[0] - self.patch_size[0]) / 2, 0):
+                #     min(mask_arr.shape[0] - (mask_arr.shape[0] - self.patch_size[0]) / 2, mask_arr.shape[0]),
+                #     max((mask_arr.shape[1] - self.patch_size[1]) / 2, 0):
+                #     min(mask_arr.shape[1] - (mask_arr.shape[1] - self.patch_size[1]) / 2, mask_arr.shape[1]),
+                #     max((mask_arr.shape[2] - self.patch_size[2]) / 2, 0):
+                #     min(mask_arr.shape[2] - (mask_arr.shape[2] - self.patch_size[2]) / 2, mask_arr.shape[2])]
                 # print("mask_arr shape {}".format(mask_arr.shape))
                 self.rawmask.append(mask_arr)
 
                 #######################
                 # reading real image data
+                # bbox = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
                 for keywd in self.keywords:
                     image_name = "{}_{}.nii.gz".format(data_name, keywd)
                     abs_image_path = os.path.join(data_real_folder, image_name)
@@ -132,6 +139,9 @@ class CMR3DDatasetBRATS(data.Dataset):
                     # z, y, x -> x, y, z
                     im_arr = np.transpose(im_arr, [2, 1, 0])
 
+                    # store the whole shape
+                    image_shape = im_arr.shape
+
                     # calculate bbox
                     # im_arr_non_zero = np.where(im_arr > 0)
                     # this_bbox_min = np.array(
@@ -141,27 +151,25 @@ class CMR3DDatasetBRATS(data.Dataset):
                     # logging.debug("data {}, mod {},  size {} -> {}, delta {}".format(data_name, keywd,
                     #                                                                  this_bbox_min, this_bbox_max,
                     #                                                                  this_bbox_max - this_bbox_min))
-                    # self.bbox[0] += this_bbox_min
-                    # self.bbox[1] += this_bbox_max
+                    # bbox[0] += this_bbox_min
+                    # bbox[1] += this_bbox_max
 
-                    im_arr = im_arr[
-                               max((im_arr.shape[0] - self.patch_size[0]) / 2, 0):
-                               min(im_arr.shape[0] - (im_arr.shape[0] - self.patch_size[0]) / 2, im_arr.shape[0]),
-                               max((im_arr.shape[1] - self.patch_size[1]) / 2, 0):
-                               min(im_arr.shape[1] - (im_arr.shape[1] - self.patch_size[1]) / 2, im_arr.shape[1]),
-                               max((im_arr.shape[2] - self.patch_size[2]) / 2, 0):
-                               min(im_arr.shape[2] - (im_arr.shape[2] - self.patch_size[2]) / 2, im_arr.shape[2])]
+                    # im_arr = im_arr[
+                    #            max((im_arr.shape[0] - self.patch_size[0]) / 2, 0):
+                    #            min(im_arr.shape[0] - (im_arr.shape[0] - self.patch_size[0]) / 2, im_arr.shape[0]),
+                    #            max((im_arr.shape[1] - self.patch_size[1]) / 2, 0):
+                    #            min(im_arr.shape[1] - (im_arr.shape[1] - self.patch_size[1]) / 2, im_arr.shape[1]),
+                    #            max((im_arr.shape[2] - self.patch_size[2]) / 2, 0):
+                    #            min(im_arr.shape[2] - (im_arr.shape[2] - self.patch_size[2]) / 2, im_arr.shape[2])]
                     # print("im_arr shape {}".format(im_arr.shape))
-
                     # append the images
                     self.rawim[keywd].append(im_arr)
 
-            # calculate avg bbox
-            # self.bbox[0] /= (len(self.data_name_vec) * len(self.keywords))
-            # self.bbox[1] /= (len(self.data_name_vec) * len(self.keywords))
-            # to int
-            # self.bbox[0] = np.floor(self.bbox[0])
-            # self.bbox[1] = np.floor(self.bbox[1])
+                # # calculate avg bbox
+                # bbox[0] = np.maximum(bbox[0] - self.margin, np.array([0, 0, 0]))
+                # bbox[1] = np.minimum(bbox[1] + self.margin, image_shape)
+                # bbox = bbox.astype(np.int)
+                # logging.debug("bbox {} -> {}".format(bbox[0], bbox[1]))
 
             for keywd in self.keywords:
                 # transform to np array
@@ -234,13 +242,13 @@ class CMR3DDatasetBRATS(data.Dataset):
             # new_mask_arr[mask_tr == 1] = 3
             # new_mask_arr[mask_tr == 4] = 2
             # mask_tr = new_mask_arr
-            mask_arr = mask_arr[
-                       max((mask_arr.shape[0] - self.patch_size[0]) / 2, 0):
-                       min(mask_arr.shape[0] - (mask_arr.shape[0] - self.patch_size[0]) / 2, mask_arr.shape[0]),
-                       max((mask_arr.shape[1] - self.patch_size[1]) / 2, 0):
-                       min(mask_arr.shape[1] - (mask_arr.shape[1] - self.patch_size[1]) / 2, mask_arr.shape[1]),
-                       max((mask_arr.shape[2] - self.patch_size[2]) / 2, 0):
-                       min(mask_arr.shape[2] - (mask_arr.shape[2] - self.patch_size[2]) / 2, mask_arr.shape[2])]
+            # mask_arr = mask_arr[
+            #            max((mask_arr.shape[0] - self.patch_size[0]) / 2, 0):
+            #            min(mask_arr.shape[0] - (mask_arr.shape[0] - self.patch_size[0]) / 2, mask_arr.shape[0]),
+            #            max((mask_arr.shape[1] - self.patch_size[1]) / 2, 0):
+            #            min(mask_arr.shape[1] - (mask_arr.shape[1] - self.patch_size[1]) / 2, mask_arr.shape[1]),
+            #            max((mask_arr.shape[2] - self.patch_size[2]) / 2, 0):
+            #            min(mask_arr.shape[2] - (mask_arr.shape[2] - self.patch_size[2]) / 2, mask_arr.shape[2])]
             # print("mask_arr shape {}".format(mask_arr.shape))
             mask_tr.append(mask_arr)
             mask_tr = np.array(mask_tr)
@@ -266,13 +274,13 @@ class CMR3DDatasetBRATS(data.Dataset):
                 # self.bbox[0] += this_bbox_min
                 # self.bbox[1] += this_bbox_max
 
-                im_arr = im_arr[
-                         max((im_arr.shape[0] - self.patch_size[0]) / 2, 0):
-                         min(im_arr.shape[0] - (im_arr.shape[0] - self.patch_size[0]) / 2, im_arr.shape[0]),
-                         max((im_arr.shape[1] - self.patch_size[1]) / 2, 0):
-                         min(im_arr.shape[1] - (im_arr.shape[1] - self.patch_size[1]) / 2, im_arr.shape[1]),
-                         max((im_arr.shape[2] - self.patch_size[2]) / 2, 0):
-                         min(im_arr.shape[2] - (im_arr.shape[2] - self.patch_size[2]) / 2, im_arr.shape[2])]
+                # im_arr = im_arr[
+                #          max((im_arr.shape[0] - self.patch_size[0]) / 2, 0):
+                #          min(im_arr.shape[0] - (im_arr.shape[0] - self.patch_size[0]) / 2, im_arr.shape[0]),
+                #          max((im_arr.shape[1] - self.patch_size[1]) / 2, 0):
+                #          min(im_arr.shape[1] - (im_arr.shape[1] - self.patch_size[1]) / 2, im_arr.shape[1]),
+                #          max((im_arr.shape[2] - self.patch_size[2]) / 2, 0):
+                #          min(im_arr.shape[2] - (im_arr.shape[2] - self.patch_size[2]) / 2, im_arr.shape[2])]
                 img_tr.append(im_arr)
 
             img_tr = np.array(img_tr)

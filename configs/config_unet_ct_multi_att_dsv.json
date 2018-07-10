@@ -35,7 +35,6 @@
     "which_epoch": -1,
     "model_type": "unet_ct_multi_att_dsv",
     "tensor_dim": "3D",
-    "division_factor": 16,
     "input_nc": 1,
     "output_nc": 4,
     "lr_rate": 1e-4,

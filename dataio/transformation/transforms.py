@@ -45,13 +45,13 @@ class Transformations:
             self.scale_size = t_opts.scale_size
         if hasattr(t_opts, 'patch_size'):
             self.patch_size = t_opts.patch_size
-        if hasattr(t_opts, 'shift_val'):
+        if hasattr(t_opts, 'shift'):
             self.shift_val = t_opts.shift
-        if hasattr(t_opts, 'rotate_val'):
+        if hasattr(t_opts, 'rotate'):
             self.rotate_val = t_opts.rotate
-        if hasattr(t_opts, 'scale_val'):
+        if hasattr(t_opts, 'scale'):
             self.scale_val = t_opts.scale
-        if hasattr(t_opts, 'inten_val'):
+        if hasattr(t_opts, 'intensity'):
             self.inten_val = t_opts.intensity
         if hasattr(t_opts, 'random_flip_prob'):
             self.random_flip_prob = t_opts.random_flip_prob

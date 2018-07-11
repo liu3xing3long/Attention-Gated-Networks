@@ -67,72 +67,62 @@ class _GridAttentionBlockND(nn.Module):
             # print "child {}".format(m)
             init_weights(m, init_type='kaiming')
 
-        # Define the operation
-        if mode == 'concatenation':
-            self.operation_function = self._concatenation
-        elif mode == 'concatenation_debug':
-            self.operation_function = self._concatenation_debug
-        elif mode == 'concatenation_residual':
-            self.operation_function = self._concatenation_residual
-        else:
-            raise NotImplementedError('Unknown operation function.')
-
-        # gpu_ids = [0, 1, 2, 3]
-        # self.W = nn.DataParallel(self.W)
-        # self.phi = nn.DataParallel(self.phi)
-        # self.psi = nn.DataParallel(self.psi)
-        # self.theta = nn.DataParallel(self.theta)
-
     def forward(self, x, g):
         '''
         :param x: (b, c, t, h, w)
         :param g: (b, g_d)
         :return:
         '''
-        input_device_id = x.data.get_device()
-        # self.W = self.W.cuda(input_device_id)
-        # self.phi = self.phi.cuda(input_device_id)
-        # self.psi = self.psi.cuda(input_device_id)
-        # self.theta = self.theta.cuda(input_device_id)
-
-        x = x.cuda(0)
-        g = g.cuda(0)
-
-        # print "before operation size {} on device {}".format(x.size(), x.data.get_device())
-        output = self.operation_function(x, g)
-        output = (output[0].cuda(input_device_id), output[1].cuda(input_device_id))
-
-        # print "after operation size {} on device {}".format(output[0].size(), output[0].data.get_device())
-
+        output = None
+        # Define the operation
+        if self.mode == 'concatenation':
+            output = self._concatenation(x, g)
+        elif self.mode == 'concatenation_debug':
+            output = self._concatenation_debug(x, g)
+        elif self.mode == 'concatenation_residual':
+            output = self._concatenation_residual(x, g)
+        else:
+            raise NotImplementedError('Unknown operation function.')
         return output
+
+        # input_device_id = x.data.get_device()
+        # x = x.cuda(0)
+        # g = g.cuda(0)
+        # print "before operation on device {}".format(x.data.get_device())
+        # output = self.operation_function(x, g)
+        # output = (output[0].cuda(input_device_id), output[1].cuda(input_device_id))
+        # print "after operation device {}".format(output[0].data.get_device())
 
     def _concatenation(self, x, g):
         input_size = x.size()
         batch_size = input_size[0]
         assert batch_size == g.size(0)
-        # print "x size {} on device {}".format(input_size, x.data.get_device())
+
+        input_device_id = x.data.get_device()
+        # print "x on device {}".format(input_device_id)
 
         # theta => (b, c, t, h, w) -> (b, i_c, t, h, w) -> (b, i_c, thw)
         # phi   => (b, g_d) -> (b, i_c)
+        # self.theta = self.theta.cuda(input_device_id)
         theta_x = self.theta(x)
         theta_x_size = theta_x.size()
-        # print "theta_x size {} on device {}".format(theta_x.size(), theta_x.data.get_device())
+        # print "theta_x on device {}".format(theta_x.data.get_device())
 
         # g (b, c, t', h', w') -> phi_g (b, i_c, t', h', w')
         #  Relu(theta_x + phi_g + bias) -> f = (b, i_c, thw) -> (b, i_c, t/s1, h/s2, w/s3)
         phi_g = F.upsample(self.phi(g), size=theta_x_size[2:], mode=self.upsample_mode)
         f = F.relu(theta_x + phi_g, inplace=True)
-        # print "phi_g size {} on device {}".format(phi_g.size(), phi_g.data.get_device())
+        # print "phi_g on device {}".format(phi_g.data.get_device())
 
         #  psi^T * f -> (b, psi_i_c, t/s1, h/s2, w/s3)
         sigm_psi_f = F.sigmoid(self.psi(f))
-        # print "sigm_psi_f size {} on device {}".format(sigm_psi_f.size(), sigm_psi_f.data.get_device())
+        # print "sigm_psi_f on device {}".format(sigm_psi_f.data.get_device())
 
         # upsample the attentions and multiply
         sigm_psi_f = F.upsample(sigm_psi_f, size=input_size[2:], mode=self.upsample_mode)
         y = sigm_psi_f.expand_as(x) * x
         W_y = self.W(y)
-        # print "W_y size {} on device {}".format(W_y.size(), W_y.data.get_device())
+        # print "W_y on device {}".format(W_y.data.get_device())
 
         return W_y, sigm_psi_f
 
@@ -287,12 +277,6 @@ class _GridAttentionBlockND_TORR(nn.Module):
             if nonlinearity1 == 'relu':
                 self.nl1 = lambda x: F.relu(x, inplace=True)
 
-        if 'concatenation' in mode:
-            self.operation_function = self._concatenation
-        else:
-            # print "given mode {} not found".format(mode)
-            raise NotImplementedError('Unknown operation function.')
-
         # Initialise weights
         for m in self.children():
             init_weights(m, init_type='kaiming')
@@ -326,8 +310,12 @@ class _GridAttentionBlockND_TORR(nn.Module):
         :param g: (b, g_d)
         :return:
         '''
-
-        output = self.operation_function(x, g)
+        output = None
+        if 'concatenation' in self.mode:
+            output = self._concatenation(x, g)
+        else:
+            raise NotImplementedError('Unknown operation function.')
+        # output = self.operation_function(x, g)
         return output
 
     def _concatenation(self, x, g):

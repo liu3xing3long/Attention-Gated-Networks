@@ -1,9 +1,9 @@
 {
   "training":{
     "arch_type": "acdc_sax_brats",
-    "n_epochs": 300,
+    "n_epochs": 200,
     "save_epoch_freq": 10,
-    "lr_policy": "step",
+    "lr_policy": "step_warmstart2",
     "lr_decay_iters": 250,
     "batchSize": 1,
     "subset_train": [1,2,3,4,5,6,7,8,9,10,11,12,13,14],
@@ -26,7 +26,7 @@
     "acdc_sax_brats": {
       "division_factor": [16,16,1],
       "preload_data": true,
-      "augment_scale": 8,
+      "augment_scale": 4,
       "shift": [0.05,0.05],
       "rotate": 15.0,
       "scale": [0.9,1.1],

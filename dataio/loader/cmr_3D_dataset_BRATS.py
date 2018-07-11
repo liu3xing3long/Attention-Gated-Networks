@@ -16,7 +16,6 @@ import torch.utils.data as data
 
 from .utils import load_nifti_img, check_exceptions, is_image_file
 
-
 class CMR3DDatasetBRATS(data.Dataset):
     def __init__(self, dataset_folder, subset_folder, label_folder, data_subsets, keywords=["P1", "1", "flair"],
                  mode='train', transform=None, aug_opts=None):

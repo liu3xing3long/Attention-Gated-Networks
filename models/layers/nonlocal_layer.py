@@ -72,21 +72,6 @@ class _NonLocalBlockND(nn.Module):
                 self.psi = nn.Conv2d(in_channels=self.inter_channels, out_channels=1, kernel_size=1, stride=1,
                                      padding=0, bias=True)
 
-        if mode == 'embedded_gaussian':
-            self.operation_function = self._embedded_gaussian
-        elif mode == 'dot_product':
-            self.operation_function = self._dot_product
-        elif mode == 'gaussian':
-            self.operation_function = self._gaussian
-        elif mode == 'concatenation':
-            self.operation_function = self._concatenation
-        elif mode == 'concat_proper':
-            self.operation_function = self._concatenation_proper
-        elif mode == 'concat_proper_down':
-            self.operation_function = self._concatenation_proper_down
-        else:
-            raise NotImplementedError('Unknown operation function.')
-
         if any(ss > 1 for ss in self.sub_sample_factor):
             self.g = nn.Sequential(self.g, max_pool(kernel_size=sub_sample_factor))
             if self.phi is None:
@@ -105,8 +90,23 @@ class _NonLocalBlockND(nn.Module):
         :param x: (b, c, t, h, w)
         :return:
         '''
+        output = None
+        # output = self.operation_function(x)
+        if self.mode == 'embedded_gaussian':
+            output = self._embedded_gaussian(x)
+        elif self.mode == 'dot_product':
+            output = self._dot_product(x)
+        elif self.mode == 'gaussian':
+            output = self._gaussian(x)
+        elif self.mode == 'concatenation':
+            output = self._concatenation(x)
+        elif self.mode == 'concat_proper':
+            output = self._concatenation_proper(x)
+        elif self.mode == 'concat_proper_down':
+            output = self._concatenation_proper_down(x)
+        else:
+            raise NotImplementedError('Unknown operation function.')
 
-        output = self.operation_function(x)
         return output
 
     def _embedded_gaussian(self, x):

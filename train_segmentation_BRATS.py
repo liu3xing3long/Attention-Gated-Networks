@@ -103,9 +103,9 @@ def train(arguments):
     train_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_train,
                              keywords=modality, mode='train', transform=ds_transform['train'],
                              aug_opts=this_arch_aug_opts)
-    valid_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
-                             keywords=modality, mode='val', transform=ds_transform['valid'],
-                             aug_opts=this_arch_aug_opts)
+    # valid_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
+    #                          keywords=modality, mode='val', transform=ds_transform['valid'],
+    #                          aug_opts=this_arch_aug_opts)
     test_dataset = ds_class(DATA_FOLDER, SUBSET_FOLDERS, DATA_LABEL_FOLDER, subset_val,
                             keywords=modality, mode='test',  transform=ds_transform['valid'],
                             aug_opts=this_arch_aug_opts)
@@ -113,8 +113,8 @@ def train(arguments):
     num_workers = 8
     train_loader = DataLoader(dataset=train_dataset, num_workers=num_workers,
                               batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=True)
-    valid_loader = DataLoader(dataset=valid_dataset, num_workers=num_workers,
-                              batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=False)
+    # valid_loader = DataLoader(dataset=valid_dataset, num_workers=num_workers,
+    #                           batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=False)
     test_loader = DataLoader(dataset=test_dataset, num_workers=num_workers,
                              batch_size=train_opts.batchSize * len(model.gpu_ids), shuffle=False)
 
@@ -147,7 +147,8 @@ def train(arguments):
             visualizer.display_current_results(visuals, epoch=epoch, save_result=False)
 
         # Validation and Testing Iterations
-        for loader, split in zip([valid_loader, test_loader], ['validation', 'test']):
+        # for loader, split in zip([valid_loader, test_loader], ['validation', 'test']):
+        for loader, split in zip([test_loader], ['test']):
             for epoch_iter, (images, labels) in tqdm(enumerate(loader, 1), total=len(loader)):
 
                 # Make a forward pass with the model
@@ -171,7 +172,8 @@ def train(arguments):
                 visualizer.display_current_results(visuals, epoch=epoch, save_result=False)
 
         # Update the plots
-        for split in ['train', 'validation', 'test']:
+        # for split in ['train', 'validation', 'test']:
+        for split in ['train', 'test']:
             visualizer.plot_current_errors(epoch, error_logger.get_errors(split), split_name=split)
             visualizer.print_current_errors(epoch, error_logger.get_errors(split), split_name=split)
         error_logger.reset()

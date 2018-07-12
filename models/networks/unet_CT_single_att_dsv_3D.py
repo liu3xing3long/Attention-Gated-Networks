@@ -102,7 +102,6 @@ class unet_CT_single_att_dsv_3D(nn.Module):
 
         return final
 
-
     @staticmethod
     def apply_argmax_softmax(pred):
         log_p = F.softmax(pred, dim=1)

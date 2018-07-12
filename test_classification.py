@@ -134,10 +134,14 @@ def test(arguments):
             model.validate()
 
         # Error visualisation
+        # errors = model.get_accumulated_errors()
+        # stats = model.get_classification_stats()
+        # error_logger.update({**errors, **stats}, split=split)
         errors = model.get_accumulated_errors()
         stats = model.get_classification_stats()
-        error_logger.update({**errors, **stats}, split=split)
-
+        merged_dict = {}
+        merged_dict.update(errors)
+        merged_dict.update(stats)
     # Update the plots
     # for split in ['train', 'validation', 'test']:
     for split in ['test']:

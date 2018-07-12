@@ -33,7 +33,7 @@
       "intensity": [1.0,1.0],
       "random_flip_prob": 0.5,
       "scale_size": [160,192,160],
-      "patch_size": [144,160,144]
+      "patch_size": [160,192,160]
     }
   },
   "model":{

@@ -46,7 +46,6 @@ class unet_CT_dsv_3D(nn.Module):
         # final conv (without any concat)
         self.final = nn.Conv3d(n_classes*4, n_classes, 1)
 
-
         # initialise weights
         for m in self.modules():
             if isinstance(m, nn.Conv3d):
